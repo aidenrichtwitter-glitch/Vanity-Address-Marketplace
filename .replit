@@ -27,4 +27,4 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py search-words --threads 2 --min-word-length 4 --batch-size 1000"
+args = "python main.py search-words --min-word-length 4 --count 0"

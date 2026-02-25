@@ -38,29 +38,31 @@ def search_pubkey(starts_with, ends_with, count, output_dir, select_device, iter
 
 
 @cli.command(name="search-words", context_settings={"show_default": True})
-@click.option("--threads", type=int, default=None, help="CPU threads for word checking (default: all cores).")
 @click.option("--min-word-length", type=int, default=4, help="Minimum word length to search for.")
 @click.option("--max-word-length", type=int, default=0, help="Maximum word length (0 = no limit).")
 @click.option("--custom-words", type=str, default="", help="Comma-separated custom words to add.")
 @click.option("--output-dir", type=click.Path(file_okay=False, dir_okay=True, writable=True), default="./found_words", help="Output directory for found keypairs.")
-@click.option("--batch-size", type=int, default=500, help="Keys per batch per thread.")
-def search_words(threads, min_word_length, max_word_length, custom_words, output_dir, batch_size):
-    """Mine for addresses ending in cool words with uppercase padding.
+@click.option("--count", type=int, default=0, help="Number of addresses to find (0 = unlimited).")
+@click.option("--iteration-bits", type=int, default=24, help="Iteration bits (e.g., 24, 26, 28, etc.)")
+@click.option("--select-device/--no-select-device", default=False, help="Select OpenCL device manually")
+def search_words(min_word_length, max_word_length, custom_words, output_dir, count, iteration_bits, select_device):
+    """Mine for addresses ending in cool words with XX padding using GPU.
 
-    Generates random Solana keypairs and checks if the address ends with
-    a recognizable word. Shorter words require uppercase Base58 padding
-    before them to fill a 6-character tail (e.g., XXomen, XXXthe).
+    Uses the GPU to search for Solana addresses where the last 6 characters
+    form a pattern like XXomen, Xdream, or dragon. The XX is literal padding.
 
-    Found keypairs are saved as JSON files compatible with Solana CLI.
+    All suffix patterns are compiled into the OpenCL kernel for maximum
+    GPU throughput (tens of millions of keys per second).
     """
     from core.word_miner import run_word_miner
     run_word_miner(
-        threads=threads,
         min_word_length=min_word_length,
         max_word_length=max_word_length,
         custom_words=custom_words or None,
         output_dir=output_dir,
-        batch_size=batch_size,
+        count=count,
+        iteration_bits=iteration_bits,
+        select_device=select_device,
     )
 
 
@@ -72,7 +74,10 @@ def show_device():
         platforms = cl.get_platforms()
         for p_index, platform in enumerate(platforms):
             click.echo(f"Platform {p_index}: {platform.name}")
-            devices = platform.get_devices(device_type=cl.device_type.GPU)
+            try:
+                devices = platform.get_devices(device_type=cl.device_type.GPU)
+            except cl.LogicError:
+                devices = []
             for d_index, device in enumerate(devices):
                 click.echo(f"  - Device {d_index}: {device.name}")
         if not platforms:

@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
     "base58>=2.1.1",
     "click>=8.3.1",
+    "pyinstaller>=6.19.0",
     "pynacl>=1.6.2",
     "pyopencl>=2026.1.2",
     "rich>=14.3.3",
