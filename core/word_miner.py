@@ -23,7 +23,7 @@ def build_suffix_patterns(word_filter):
     for word in word_filter.words:
         wlen = len(word)
         if wlen >= TAIL_SIZE:
-            patterns.append(word[:TAIL_SIZE])
+            patterns.append(word)
         else:
             pad_needed = TAIL_SIZE - wlen
             pattern = (PAD_CHAR * pad_needed) + word
