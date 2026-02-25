@@ -170,6 +170,7 @@ class MiningSignals(QObject):
     speed = Signal(str)
     error = Signal(str)
     stopped = Signal()
+    gpu_detected = Signal(str, int)
 
 
 class MiningThread(threading.Thread):
@@ -433,9 +434,9 @@ class MainWindow(QMainWindow):
         temp_col.addWidget(temp_lbl)
         self.max_temp_spin = QSpinBox()
         self.max_temp_spin.setRange(60, 95)
-        self._detected_gpu_name = get_gpu_name()
-        self._recommended_temp = get_recommended_max_temp(self._detected_gpu_name)
-        self.max_temp_spin.setValue(self._recommended_temp)
+        self._detected_gpu_name = None
+        self._recommended_temp = 80
+        self.max_temp_spin.setValue(80)
         self.max_temp_spin.setSuffix("°C")
         temp_col.addWidget(self.max_temp_spin)
         row3.addLayout(temp_col)
@@ -445,8 +446,7 @@ class MainWindow(QMainWindow):
         gpu_info_title = QLabel("Detected GPU")
         gpu_info_title.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
         gpu_info_col.addWidget(gpu_info_title)
-        gpu_display = self._detected_gpu_name or "Not detected"
-        self.gpu_name_label = QLabel(gpu_display)
+        self.gpu_name_label = QLabel("Detecting...")
         self.gpu_name_label.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: #6ea8fe; background: transparent; padding: 4px 0;"
         )
@@ -568,15 +568,23 @@ class MainWindow(QMainWindow):
         self.signals.speed.connect(self._on_speed)
         self.signals.error.connect(self._on_error)
         self.signals.stopped.connect(self._on_stopped)
+        self.signals.gpu_detected.connect(self._on_gpu_detected)
 
         self.start_time = None
         self.timer = QTimer()
         self.timer.timeout.connect(self._update_elapsed)
 
+        self._last_temp_value = None
+        self._last_temp_zone = None
+        self._temp_lock = threading.Lock()
+        self._gpu_detected = False
+
+        self._temp_thread = threading.Thread(target=self._temp_poll_loop, daemon=True)
+        self._temp_thread.start()
+
         self.temp_timer = QTimer()
-        self.temp_timer.timeout.connect(self._update_gpu_temp)
+        self.temp_timer.timeout.connect(self._apply_temp_display)
         self.temp_timer.start(2000)
-        self._update_gpu_temp()
 
     def _load_word_count(self):
         try:
@@ -673,49 +681,78 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Stopped")
         self.mining_thread = None
 
-    def _update_gpu_temp(self):
-        temp = get_gpu_temp()
+    def _temp_poll_loop(self):
+        if not self._gpu_detected:
+            try:
+                name = get_gpu_name()
+                rec = get_recommended_max_temp(name)
+                self._detected_gpu_name = name
+                self._recommended_temp = rec
+                self._gpu_detected = True
+                self.signals.gpu_detected.emit(name or "Not detected", rec)
+            except Exception:
+                pass
+        while True:
+            try:
+                temp = get_gpu_temp()
+                with self._temp_lock:
+                    self._last_temp_value = temp
+            except Exception:
+                pass
+            time.sleep(2)
+
+    def _on_gpu_detected(self, name, rec_temp):
+        self.gpu_name_label.setText(name)
+        self._recommended_temp = rec_temp
+        self.max_temp_spin.setValue(rec_temp)
+
+    def _apply_temp_display(self):
+        with self._temp_lock:
+            temp = self._last_temp_value
+
         if temp is not None:
             max_t = self.max_temp_spin.value()
             if temp >= max_t:
-                color = "#ff4040"
-                border_color = "#ff4040"
-                status = "THROTTLED"
-                status_color = "#ff4040"
+                zone = "hot"
             elif temp >= max_t - 10:
-                color = "#f0c040"
-                border_color = "#f0c040"
-                status = "WARM"
-                status_color = "#f0c040"
+                zone = "warm"
             else:
-                color = "#50e050"
-                border_color = "#3a3a5c"
-                status = "OK"
-                status_color = "#50e050"
+                zone = "ok"
+
             self.temp_label.setText(f"{temp}°C")
-            self.temp_label.setStyleSheet(
-                f"font-size: 32px; font-weight: bold; color: {color}; background: transparent;"
-            )
-            self.temp_status_label.setText(status)
-            self.temp_status_label.setStyleSheet(
-                f"font-size: 10px; font-weight: bold; color: {status_color}; background: transparent;"
-            )
-            self.temp_label.parent().setStyleSheet(f"""
-                QGroupBox {{
-                    border: 2px solid {border_color};
-                    border-radius: 8px;
-                    margin-top: 6px;
-                    padding-top: 14px;
-                    font-size: 10px;
-                    color: #8888aa;
-                }}
-                QGroupBox::title {{
-                    subcontrol-origin: margin;
-                    left: 10px;
-                    padding: 0 4px;
-                }}
-            """)
-        else:
+
+            if zone != self._last_temp_zone:
+                self._last_temp_zone = zone
+                if zone == "hot":
+                    color, border_color, status, status_color = "#ff4040", "#ff4040", "THROTTLED", "#ff4040"
+                elif zone == "warm":
+                    color, border_color, status, status_color = "#f0c040", "#f0c040", "WARM", "#f0c040"
+                else:
+                    color, border_color, status, status_color = "#50e050", "#3a3a5c", "OK", "#50e050"
+                self.temp_label.setStyleSheet(
+                    f"font-size: 32px; font-weight: bold; color: {color}; background: transparent;"
+                )
+                self.temp_status_label.setText(status)
+                self.temp_status_label.setStyleSheet(
+                    f"font-size: 10px; font-weight: bold; color: {status_color}; background: transparent;"
+                )
+                self.temp_label.parent().setStyleSheet(f"""
+                    QGroupBox {{
+                        border: 2px solid {border_color};
+                        border-radius: 8px;
+                        margin-top: 6px;
+                        padding-top: 14px;
+                        font-size: 10px;
+                        color: #8888aa;
+                    }}
+                    QGroupBox::title {{
+                        subcontrol-origin: margin;
+                        left: 10px;
+                        padding: 0 4px;
+                    }}
+                """)
+        elif self._last_temp_zone != "none":
+            self._last_temp_zone = "none"
             self.temp_label.setText("--°C")
             self.temp_label.setStyleSheet(
                 "font-size: 32px; font-weight: bold; color: #555577; background: transparent;"
