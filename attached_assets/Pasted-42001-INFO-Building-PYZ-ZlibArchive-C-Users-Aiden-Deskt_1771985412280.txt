@@ -1,0 +1,43 @@
+42001 INFO: Building PYZ (ZlibArchive) C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner\build\solvanity\PYZ-00.pyz
+42579 INFO: Building PYZ (ZlibArchive) C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner\build\solvanity\PYZ-00.pyz completed successfully.
+42597 INFO: checking PKG
+42635 INFO: Building because toc changed
+42635 INFO: Building PKG (CArchive) solvanity.pkg
+56935 INFO: Building PKG (CArchive) solvanity.pkg completed successfully.
+56940 INFO: Bootloader C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+56941 INFO: checking EXE
+56983 INFO: Building because toc changed
+56984 INFO: Building EXE from EXE-00.toc
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\__main__.py", line 321, in <module>
+    run()
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\__main__.py", line 215, in run
+    run_build(pyi_config, spec_file, **vars(args))
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\__main__.py", line 70, in run_build
+    PyInstaller.building.build_main.main(pyi_config, spec_file, **kwargs)
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\building\build_main.py", line 1275, in main
+    build(specfile, distpath, workpath, clean_build)
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\building\build_main.py", line 1213, in build
+    exec(code, spec_namespace)
+  File "C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner\solvanity.spec", line 30, in <module>
+    exe = EXE(
+          ^^^^
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\building\api.py", line 675, in __init__
+    self.__postinit__()
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\building\datastruct.py", line 184, in __postinit__
+    self.assemble()
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\PyInstaller\building\api.py", line 769, in assemble
+    os.remove(self.name)
+PermissionError: [WinError 5] Access is denied: 'C:\\Users\\Aiden\\Desktop\\GPUminer\\Gpu-Vanity-Miner\\dist\\solvanity.exe'
+Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner\build.py", line 73, in <module>
+    build()
+  File "C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner\build.py", line 61, in build
+    subprocess.run(cmd, check=True)
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['C:\\Users\\Aiden\\AppData\\Local\\Microsoft\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\\python.exe', '-m', 'PyInstaller', '--onefile', '--windowed', '--name', 'solvanity', '--add-data', 'core/opencl/kernel.cl;core/opencl', '--hidden-import', 'cffi', '--hidden-import', '_cffi_backend', '--hidden-import', 'pyopencl', '--hidden-import', 'nacl', '--hidden-import', 'nacl.signing', '--hidden-import', 'nacl.bindings', '--hidden-import', 'nacl.bindings.crypto_aead', '--hidden-import', 'nacl.bindings.crypto_box', '--hidden-import', 'nacl.bindings.crypto_generichash', '--hidden-import', 'nacl.bindings.crypto_hash', '--hidden-import', 'nacl.bindings.crypto_pwhash', '--hidden-import', 'nacl.bindings.crypto_scalarmult', '--hidden-import', 'nacl.bindings.crypto_secretbox', '--hidden-import', 'nacl.bindings.crypto_secretstream', '--hidden-import', 'nacl.bindings.crypto_shorthash', '--hidden-import', 'nacl.bindings.crypto_sign', '--hidden-import', 'nacl.bindings.randombytes', '--hidden-import', 'nacl.bindings.utils', '--hidden-import', 'base58', '--hidden-import', 'click', '--hidden-import', 'PySide6', '--collect-all', 'pyopencl', '--collect-all', 'nacl', '--collect-all', 'cffi', 'gui.py']' returned non-zero exit status 1.
+
+C:\Users\Aiden\Desktop\GPUminer\Gpu-Vanity-Miner>
