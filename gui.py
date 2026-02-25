@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QTextEdit,
-    QFileDialog, QSplitter,
+    QFileDialog, QSplitter, QSlider,
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QFont, QColor
@@ -21,6 +21,7 @@ from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
 from core.word_miner import build_suffix_patterns
 from core.config import DEFAULT_ITERATION_BITS
 from core.utils.crypto import get_public_key_from_private_bytes, save_keypair
+from core.utils.gpu_temp import get_gpu_temp
 
 STYLESHEET = """
 QMainWindow, QWidget {
@@ -173,7 +174,7 @@ class MiningSignals(QObject):
 
 class MiningThread(threading.Thread):
     def __init__(self, signals, word_filter, suffix_patterns, output_dir,
-                 count, iteration_bits):
+                 count, iteration_bits, power_pct=100, max_temp=80):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
@@ -181,6 +182,8 @@ class MiningThread(threading.Thread):
         self.output_dir = output_dir
         self.count = count
         self.iteration_bits = iteration_bits
+        self.power_pct = power_pct
+        self.max_temp = max_temp
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -232,7 +235,8 @@ class MiningThread(threading.Thread):
                 p_conn, c_conn = mp_ctx.Pipe()
                 proc = mp_ctx.Process(
                     target=_persistent_worker,
-                    args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn),
+                    args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn,
+                          self.power_pct, self.max_temp),
                     daemon=True,
                 )
                 proc.start()
@@ -272,6 +276,10 @@ class MiningThread(threading.Thread):
                         elif msg["type"] == "speed":
                             speed = msg["value"]
                             self.signals.speed.emit(f"{speed / 1e6:.2f} MKeys/s")
+                        elif msg["type"] == "temp":
+                            pass
+                        elif msg["type"] == "log":
+                            self.signals.log.emit(msg["msg"])
                         elif msg["type"] == "error":
                             self.signals.log.emit(f"[GPU ERROR] {msg['msg']}")
 
@@ -394,6 +402,44 @@ class MainWindow(QMainWindow):
 
         sg.addLayout(row2)
 
+        row3 = QHBoxLayout()
+        row3.setSpacing(20)
+
+        pwr_col = QVBoxLayout()
+        pwr_col.setSpacing(4)
+        pwr_lbl = QLabel("GPU Power")
+        pwr_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        pwr_col.addWidget(pwr_lbl)
+        pwr_row = QHBoxLayout()
+        pwr_row.setSpacing(8)
+        self.power_slider = QSlider(Qt.Horizontal)
+        self.power_slider.setRange(10, 100)
+        self.power_slider.setValue(100)
+        self.power_slider.setTickInterval(10)
+        self.power_slider.setSingleStep(5)
+        self.power_label = QLabel("100%")
+        self.power_label.setFixedWidth(40)
+        self.power_label.setStyleSheet("color: #e0e0e0; font-weight: bold; background: transparent;")
+        self.power_slider.valueChanged.connect(lambda v: self.power_label.setText(f"{v}%"))
+        pwr_row.addWidget(self.power_slider)
+        pwr_row.addWidget(self.power_label)
+        pwr_col.addLayout(pwr_row)
+        row3.addLayout(pwr_col)
+
+        temp_col = QVBoxLayout()
+        temp_col.setSpacing(4)
+        temp_lbl = QLabel("Max GPU Temp (°C)")
+        temp_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        temp_col.addWidget(temp_lbl)
+        self.max_temp_spin = QSpinBox()
+        self.max_temp_spin.setRange(60, 95)
+        self.max_temp_spin.setValue(80)
+        self.max_temp_spin.setSuffix("°C")
+        temp_col.addWidget(self.max_temp_spin)
+        row3.addLayout(temp_col)
+
+        sg.addLayout(row3)
+
         root.addWidget(settings)
 
         bar = QHBoxLayout()
@@ -415,6 +461,12 @@ class MainWindow(QMainWindow):
             "color: #6ea8fe; font-weight: bold; background: transparent;"
         )
         bar.addWidget(self.status_label)
+
+        self.temp_label = QLabel("")
+        self.temp_label.setStyleSheet(
+            "color: #aaaacc; font-weight: bold; background: transparent;"
+        )
+        bar.addWidget(self.temp_label)
 
         self.speed_label = QLabel("")
         self.speed_label.setStyleSheet(
@@ -467,6 +519,11 @@ class MainWindow(QMainWindow):
         self.start_time = None
         self.timer = QTimer()
         self.timer.timeout.connect(self._update_elapsed)
+
+        self.temp_timer = QTimer()
+        self.temp_timer.timeout.connect(self._update_gpu_temp)
+        self.temp_timer.start(2000)
+        self._update_gpu_temp()
 
     def _load_word_count(self):
         try:
@@ -522,6 +579,11 @@ class MainWindow(QMainWindow):
         self._on_log(f"Tail pattern: {pad_example}<word> (last {TAIL_SIZE} chars of address)")
         self._on_log(f"Sample: {', '.join(suffix_patterns[:6])}...")
 
+        power_pct = self.power_slider.value()
+        max_temp = self.max_temp_spin.value()
+
+        self._on_log(f"GPU Power: {power_pct}%  |  Max Temp: {max_temp}°C")
+
         self.mining_thread = MiningThread(
             signals=self.signals,
             word_filter=word_filter,
@@ -529,6 +591,8 @@ class MainWindow(QMainWindow):
             output_dir=output_dir,
             count=0,
             iteration_bits=DEFAULT_ITERATION_BITS,
+            power_pct=power_pct,
+            max_temp=max_temp,
         )
 
         self.start_btn.setText("Stop Mining")
@@ -555,10 +619,28 @@ class MainWindow(QMainWindow):
             self.status_label.setText("Stopped")
         self.mining_thread = None
 
+    def _update_gpu_temp(self):
+        temp = get_gpu_temp()
+        if temp is not None:
+            if temp >= 85:
+                color = "#ff4040"
+            elif temp >= 75:
+                color = "#f0c040"
+            else:
+                color = "#50e050"
+            self.temp_label.setText(f"GPU: {temp}°C")
+            self.temp_label.setStyleSheet(
+                f"color: {color}; font-weight: bold; background: transparent;"
+            )
+        else:
+            self.temp_label.setText("")
+
     def _set_controls_enabled(self, enabled):
         self.min_word_spin.setEnabled(enabled)
         self.output_dir_edit.setEnabled(enabled)
         self.wordlist_edit.setEnabled(enabled)
+        self.power_slider.setEnabled(enabled)
+        self.max_temp_spin.setEnabled(enabled)
 
     def _on_found(self, address, suffix, elapsed, count):
         row = self.results_table.rowCount()

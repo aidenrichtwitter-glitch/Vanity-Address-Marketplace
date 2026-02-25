@@ -46,6 +46,7 @@ def build():
         "--hidden-import", "base58",
         "--hidden-import", "click",
         "--hidden-import", "PySide6",
+        "--hidden-import", "pynvml",
         "--collect-all", "pyopencl",
         "--collect-all", "nacl",
         "--collect-all", "cffi",

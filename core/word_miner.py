@@ -72,9 +72,11 @@ def _worker_search(gpu_counts, stop_flag, lock):
     return [0]
 
 
-def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn):
-    import secrets as _secrets
+def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn,
+                       power_pct=100, max_temp=80):
     try:
+        from core.utils.gpu_temp import get_gpu_temp as _get_temp
+
         setting = HostSetting(kernel_source, iteration_bits)
         searcher = Searcher(
             kernel_source=kernel_source,
@@ -87,6 +89,13 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
         iterations = 0
         batch_start = time.time()
         batch_keys = 1 << iteration_bits
+        throttle_delay = 0.0
+        last_temp_check = 0.0
+        is_throttled = False
+
+        base_delay = 0.0
+        if power_pct < 100:
+            base_delay = 0.001 * (100 - power_pct) / power_pct
 
         while True:
             if conn.poll(0):
@@ -94,12 +103,36 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
                 if msg == "stop":
                     break
 
+            iter_start = time.time()
             result = searcher.find(False)
+            iter_time = time.time() - iter_start
             iterations += 1
 
             if result[0]:
                 conn.send({"type": "found", "data": list(result)})
                 searcher.setting.key32 = searcher.setting.generate_key32()
+
+            sleep_time = base_delay
+            if time.time() - last_temp_check > 2.0:
+                last_temp_check = time.time()
+                temp = _get_temp()
+                if temp is not None:
+                    conn.send({"type": "temp", "value": temp})
+                    if temp >= max_temp:
+                        over = temp - max_temp
+                        throttle_delay = iter_time * (0.5 + over * 0.3)
+                        if not is_throttled:
+                            is_throttled = True
+                            conn.send({"type": "log", "msg": f"Auto-throttle: GPU at {temp}°C (limit {max_temp}°C)"})
+                    elif temp < max_temp - 5:
+                        if is_throttled:
+                            throttle_delay = 0.0
+                            is_throttled = False
+                            conn.send({"type": "log", "msg": f"Auto-throttle off: GPU cooled to {temp}°C"})
+
+            sleep_time = max(base_delay, throttle_delay)
+            if sleep_time > 0:
+                time.sleep(sleep_time)
 
             if iterations % 16 == 0:
                 elapsed = time.time() - batch_start
