@@ -1,6 +1,7 @@
-from core.words import get_valid_words, UPPERCASE_BASE58
+from core.words import get_valid_words
 
 TAIL_SIZE = 6
+PAD_CHAR = "X"
 
 
 class WordFilter:
@@ -42,7 +43,7 @@ class WordFilter:
             if pad_start < 0:
                 continue
             padding = address[pad_start : len(address) - wlen]
-            if len(padding) == needed_pad and all(c in UPPERCASE_BASE58 for c in padding):
+            if len(padding) == needed_pad and all(c == PAD_CHAR for c in padding):
                 return tail, padding
 
         return None, None

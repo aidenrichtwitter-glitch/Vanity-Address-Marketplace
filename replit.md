@@ -3,20 +3,25 @@
 ## Overview
 A fork of [SolVanityCL](https://github.com/WincerChan/SolVanityCL) that adds CPU-based word suffix filtering on top of GPU-accelerated Solana vanity address mining.
 
-The word miner looks for addresses where the last 6 characters form a pattern: uppercase Base58 padding + a cool word. For example:
-- `...XXomen` (2 uppercase pad + 4-letter word)
-- `...Xdream` (1 uppercase pad + 5-letter word)  
+The word miner looks for addresses where the last 6 characters form a pattern: literal "X" padding + a cool word. For example:
+- `...XXomen` (XX padding + 4-letter word)
+- `...Xdream` (X padding + 5-letter word)  
 - `...dragon` (6-letter word, no padding needed)
 
+Padding is always the literal character "X", not arbitrary uppercase letters.
+
+## GPU Setup
+Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0) to target the primary GPU (e.g. RTX 3080) instead of an integrated Intel GPU. Override via environment variable if needed.
+
 ## Architecture
-- `main.py` - Entry point with click CLI (search-pubkey, search-words, show-device, list-words)
+- `main.py` - Entry point with click CLI (search-pubkey, search-words, show-device, list-words). Sets PYOPENCL_CTX=0:0.
 - `core/cli.py` - Original SolVanityCL GPU search command
 - `core/searcher.py` - GPU searcher using OpenCL (original SolVanityCL)
 - `core/config.py` - Host settings for GPU kernel (original SolVanityCL)
 - `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (original SolVanityCL)
 - `core/opencl/manager.py` - OpenCL device manager (original SolVanityCL)
 - `core/word_miner.py` - CPU word mining engine with live Rich dashboard
-- `core/word_filter.py` - Suffix word detection with uppercase padding check (6-char tail)
+- `core/word_filter.py` - Suffix word detection with literal "X" padding check (6-char tail)
 - `core/words.py` - Dictionary of ~1500+ cool words valid in Base58
 - `core/utils/crypto.py` - Ed25519 keypair generation and saving
 - `core/utils/helpers.py` - Kernel source loader and Base58 validation

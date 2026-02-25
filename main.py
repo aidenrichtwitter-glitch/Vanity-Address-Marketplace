@@ -3,6 +3,8 @@ import multiprocessing
 import os
 import sys
 
+os.environ.setdefault("PYOPENCL_CTX", "0:0")
+
 import click
 
 
