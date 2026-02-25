@@ -242,11 +242,25 @@ def load_words_from_file(filepath):
     return words
 
 
+def _get_default_wordlist_path():
+    import sys
+    from pathlib import Path
+    base = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent))
+    wl = base / "wordlist_3000.txt"
+    if wl.exists():
+        return str(wl)
+    return None
+
+
 def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file=None):
     if wordlist_file:
         words = load_words_from_file(wordlist_file)
     else:
-        words = list(COOL_WORDS)
+        default_path = _get_default_wordlist_path()
+        if default_path:
+            words = load_words_from_file(default_path)
+        else:
+            words = list(COOL_WORDS)
     if custom_words:
         words = words + custom_words
     valid = set()

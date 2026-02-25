@@ -15,14 +15,16 @@ import sys
 
 def build():
     sep = ";" if platform.system() == "Windows" else ":"
-    add_data = f"core/opencl/kernel.cl{sep}core/opencl"
+    add_data_kernel = f"core/opencl/kernel.cl{sep}core/opencl"
+    add_data_wordlist = f"wordlist_3000.txt{sep}."
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--windowed",
         "--name", "solvanity",
-        "--add-data", add_data,
+        "--add-data", add_data_kernel,
+        "--add-data", add_data_wordlist,
         "--hidden-import", "cffi",
         "--hidden-import", "_cffi_backend",
         "--hidden-import", "pyopencl",
