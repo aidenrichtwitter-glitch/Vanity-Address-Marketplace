@@ -312,35 +312,27 @@ class MainWindow(QMainWindow):
         root.addWidget(sub)
 
         settings = QGroupBox("Mining Settings")
-        sg = QHBoxLayout(settings)
-        sg.setSpacing(20)
+        sg = QVBoxLayout(settings)
+        sg.setSpacing(10)
 
-        def add_field(label_text, widget):
+        row1 = QHBoxLayout()
+        row1.setSpacing(20)
+
+        def add_field(parent_layout, label_text, widget):
             col = QVBoxLayout()
             col.setSpacing(4)
             lbl = QLabel(label_text)
             lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
             col.addWidget(lbl)
             col.addWidget(widget)
-            sg.addLayout(col)
+            parent_layout.addLayout(col)
             return col
 
         self.min_word_spin = QSpinBox()
         self.min_word_spin.setRange(3, 6)
         self.min_word_spin.setValue(4)
         self.min_word_spin.valueChanged.connect(self._load_word_count)
-        add_field("Min Word Length", self.min_word_spin)
-
-        self.max_word_spin = QSpinBox()
-        self.max_word_spin.setRange(0, 10)
-        self.max_word_spin.setValue(0)
-        self.max_word_spin.valueChanged.connect(self._load_word_count)
-        add_field("Max Length (0 = any)", self.max_word_spin)
-
-        self.iter_spin = QSpinBox()
-        self.iter_spin.setRange(16, 30)
-        self.iter_spin.setValue(DEFAULT_ITERATION_BITS)
-        add_field("Iteration Bits", self.iter_spin)
+        add_field(row1, "Min Word Length", self.min_word_spin)
 
         dir_col = QVBoxLayout()
         dir_col.setSpacing(4)
@@ -351,13 +343,44 @@ class MainWindow(QMainWindow):
         dir_row.setSpacing(4)
         self.output_dir_edit = QLineEdit("./found_words")
         dir_row.addWidget(self.output_dir_edit)
-        browse_btn = QPushButton("Browse")
-        browse_btn.setObjectName("browseBtn")
-        browse_btn.setFixedWidth(70)
-        browse_btn.clicked.connect(self._browse_dir)
-        dir_row.addWidget(browse_btn)
+        browse_dir_btn = QPushButton("Browse")
+        browse_dir_btn.setObjectName("browseBtn")
+        browse_dir_btn.setFixedWidth(70)
+        browse_dir_btn.clicked.connect(self._browse_dir)
+        dir_row.addWidget(browse_dir_btn)
         dir_col.addLayout(dir_row)
-        sg.addLayout(dir_col)
+        row1.addLayout(dir_col)
+
+        sg.addLayout(row1)
+
+        row2 = QHBoxLayout()
+        row2.setSpacing(20)
+
+        wl_col = QVBoxLayout()
+        wl_col.setSpacing(4)
+        wl_lbl = QLabel("Word List (optional - uses built-in list if empty)")
+        wl_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        wl_col.addWidget(wl_lbl)
+        wl_row = QHBoxLayout()
+        wl_row.setSpacing(4)
+        self.wordlist_edit = QLineEdit("")
+        self.wordlist_edit.setPlaceholderText("Built-in word list (1000+ words)")
+        self.wordlist_edit.textChanged.connect(self._load_word_count)
+        wl_row.addWidget(self.wordlist_edit)
+        browse_wl_btn = QPushButton("Browse")
+        browse_wl_btn.setObjectName("browseBtn")
+        browse_wl_btn.setFixedWidth(70)
+        browse_wl_btn.clicked.connect(self._browse_wordlist)
+        wl_row.addWidget(browse_wl_btn)
+        clear_wl_btn = QPushButton("Clear")
+        clear_wl_btn.setObjectName("browseBtn")
+        clear_wl_btn.setFixedWidth(50)
+        clear_wl_btn.clicked.connect(lambda: (self.wordlist_edit.clear(), self._load_word_count()))
+        wl_row.addWidget(clear_wl_btn)
+        wl_col.addLayout(wl_row)
+        row2.addLayout(wl_col)
+
+        sg.addLayout(row2)
 
         root.addWidget(settings)
 
@@ -435,19 +458,29 @@ class MainWindow(QMainWindow):
 
     def _load_word_count(self):
         try:
+            wl_file = self.wordlist_edit.text().strip() or None
             wf = WordFilter(
                 min_length=self.min_word_spin.value(),
-                max_length=self.max_word_spin.value(),
+                wordlist_file=wl_file,
             )
             patterns = build_suffix_patterns(wf)
-            self.words_label.setText(f"Words: {len(wf.words)}  |  Patterns: {len(patterns)}")
-        except Exception:
-            self.words_label.setText("Words: --")
+            source = "custom file" if wl_file else "built-in"
+            self.words_label.setText(f"Words: {len(wf.words)}  |  Patterns: {len(patterns)}  ({source})")
+        except Exception as e:
+            self.words_label.setText(f"Words: error ({e})")
 
     def _browse_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if d:
             self.output_dir_edit.setText(d)
+
+    def _browse_wordlist(self):
+        f, _ = QFileDialog.getOpenFileName(
+            self, "Select Word List File", "",
+            "Text Files (*.txt);;All Files (*)"
+        )
+        if f:
+            self.wordlist_edit.setText(f)
 
     def _toggle_mining(self):
         if self.mining_thread and self.mining_thread.is_alive():
@@ -465,14 +498,14 @@ class MainWindow(QMainWindow):
         )
 
         min_len = self.min_word_spin.value()
-        max_len = self.max_word_spin.value()
         output_dir = self.output_dir_edit.text()
-        iteration_bits = self.iter_spin.value()
+        wl_file = self.wordlist_edit.text().strip() or None
 
-        word_filter = WordFilter(min_length=min_len, max_length=max_len)
+        word_filter = WordFilter(min_length=min_len, wordlist_file=wl_file)
         suffix_patterns = build_suffix_patterns(word_filter)
 
-        self._on_log(f"Loaded {len(word_filter.words)} words, {len(suffix_patterns)} suffix patterns")
+        source = f"from {wl_file}" if wl_file else "from built-in list"
+        self._on_log(f"Loaded {len(word_filter.words)} words ({source}), {len(suffix_patterns)} suffix patterns")
         pad_example = "X" * max(0, TAIL_SIZE - min_len)
         self._on_log(f"Tail pattern: {pad_example}<word> (last {TAIL_SIZE} chars of address)")
         self._on_log(f"Sample: {', '.join(suffix_patterns[:6])}...")
@@ -483,7 +516,7 @@ class MainWindow(QMainWindow):
             suffix_patterns=suffix_patterns,
             output_dir=output_dir,
             count=0,
-            iteration_bits=iteration_bits,
+            iteration_bits=DEFAULT_ITERATION_BITS,
         )
 
         self.start_btn.setText("Stop Mining")
@@ -512,9 +545,8 @@ class MainWindow(QMainWindow):
 
     def _set_controls_enabled(self, enabled):
         self.min_word_spin.setEnabled(enabled)
-        self.max_word_spin.setEnabled(enabled)
-        self.iter_spin.setEnabled(enabled)
         self.output_dir_edit.setEnabled(enabled)
+        self.wordlist_edit.setEnabled(enabled)
 
     def _on_found(self, address, suffix, elapsed, count):
         row = self.results_table.rowCount()

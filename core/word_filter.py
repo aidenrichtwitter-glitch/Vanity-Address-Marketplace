@@ -5,7 +5,7 @@ PAD_CHAR = "X"
 
 
 class WordFilter:
-    def __init__(self, min_length=3, max_length=0, custom_words=None):
+    def __init__(self, min_length=3, max_length=0, custom_words=None, wordlist_file=None):
         self.min_length = min_length
         self.max_length = max_length
         self.tail_size = TAIL_SIZE
@@ -14,6 +14,7 @@ class WordFilter:
             min_length=min_length,
             max_length=max_length,
             custom_words=custom_words,
+            wordlist_file=wordlist_file,
         )
         self._build_lookup()
 

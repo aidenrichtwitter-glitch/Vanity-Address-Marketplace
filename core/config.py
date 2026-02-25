@@ -1,7 +1,7 @@
 import secrets
 from math import ceil
 
-DEFAULT_ITERATION_BITS = 24
+DEFAULT_ITERATION_BITS = 20
 DEFAULT_LOCAL_WORK_SIZE = 32
 
 
