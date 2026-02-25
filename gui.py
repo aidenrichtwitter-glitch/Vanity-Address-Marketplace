@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
             return col
 
         self.min_word_spin = QSpinBox()
-        self.min_word_spin.setRange(1, 6)
+        self.min_word_spin.setRange(1, 20)
         self.min_word_spin.setValue(4)
         self.min_word_spin.valueChanged.connect(self._load_word_count)
         add_field(row1, "Min Word Length", self.min_word_spin)
