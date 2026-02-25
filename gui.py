@@ -430,6 +430,12 @@ class MainWindow(QMainWindow):
         clear_wl_btn.setFixedWidth(50)
         clear_wl_btn.clicked.connect(lambda: (self.wordlist_edit.clear(), self._load_word_count()))
         wl_row.addWidget(clear_wl_btn)
+        convert_btn = QPushButton("l → 1")
+        convert_btn.setObjectName("browseBtn")
+        convert_btn.setFixedWidth(50)
+        convert_btn.setToolTip("Create a copy of the loaded wordlist with all 'l' replaced by '1'")
+        convert_btn.clicked.connect(self._convert_wordlist_l_to_1)
+        wl_row.addWidget(convert_btn)
         wl_col.addLayout(wl_row)
         row2.addLayout(wl_col)
 
@@ -651,6 +657,35 @@ class MainWindow(QMainWindow):
         )
         if f:
             self.wordlist_edit.setText(f)
+
+    def _convert_wordlist_l_to_1(self):
+        src = self.wordlist_edit.text().strip()
+        if not src:
+            self._on_log("No wordlist loaded. Browse for a file first, then click l → 1.")
+            return
+        src_path = Path(src)
+        if not src_path.exists():
+            self._on_log(f"File not found: {src}")
+            return
+        try:
+            lines = src_path.read_text(encoding="utf-8").splitlines()
+            converted = []
+            added = 0
+            for line in lines:
+                converted.append(line)
+                if 'l' in line and not line.startswith('#'):
+                    variant = line.replace('l', '1')
+                    if variant != line:
+                        converted.append(variant)
+                        added += 1
+            out_name = src_path.stem + "_l1" + src_path.suffix
+            out_path = src_path.parent / out_name
+            out_path.write_text("\n".join(converted) + "\n", encoding="utf-8")
+            self.wordlist_edit.setText(str(out_path))
+            self._load_word_count()
+            self._on_log(f"Created {out_name}: {added} l→1 variants added ({len(converted)} total lines). Auto-loaded.")
+        except Exception as e:
+            self._on_log(f"Conversion error: {e}")
 
     def _toggle_mining(self):
         if self.mining_thread and self.mining_thread.is_alive():
