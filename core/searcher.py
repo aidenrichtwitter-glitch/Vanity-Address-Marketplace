@@ -62,6 +62,8 @@ class Searcher:
 
     def find(self, log_stats: bool = True) -> bytearray:
         start_time = time.time()
+        self.output[:] = bytearray(33)
+        cl.enqueue_copy(self.command_queue, self.memobj_output, self.output)
         cl.enqueue_copy(self.command_queue, self.memobj_key32, self.setting.key32)
         global_work_size = self.setting.global_work_size // self.gpu_chunks
         local_size = self.setting.local_work_size
