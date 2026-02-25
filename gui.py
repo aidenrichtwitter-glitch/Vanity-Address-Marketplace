@@ -21,7 +21,7 @@ from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
 from core.word_miner import build_suffix_patterns
 from core.config import DEFAULT_ITERATION_BITS
 from core.utils.crypto import get_public_key_from_private_bytes, save_keypair
-from core.utils.gpu_temp import get_gpu_temp
+from core.utils.gpu_temp import get_gpu_temp, get_gpu_name, get_recommended_max_temp
 
 STYLESHEET = """
 QMainWindow, QWidget {
@@ -433,10 +433,26 @@ class MainWindow(QMainWindow):
         temp_col.addWidget(temp_lbl)
         self.max_temp_spin = QSpinBox()
         self.max_temp_spin.setRange(60, 95)
-        self.max_temp_spin.setValue(80)
+        self._detected_gpu_name = get_gpu_name()
+        self._recommended_temp = get_recommended_max_temp(self._detected_gpu_name)
+        self.max_temp_spin.setValue(self._recommended_temp)
         self.max_temp_spin.setSuffix("°C")
         temp_col.addWidget(self.max_temp_spin)
         row3.addLayout(temp_col)
+
+        gpu_info_col = QVBoxLayout()
+        gpu_info_col.setSpacing(4)
+        gpu_info_title = QLabel("Detected GPU")
+        gpu_info_title.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        gpu_info_col.addWidget(gpu_info_title)
+        gpu_display = self._detected_gpu_name or "Not detected"
+        self.gpu_name_label = QLabel(gpu_display)
+        self.gpu_name_label.setStyleSheet(
+            "font-size: 11px; font-weight: bold; color: #6ea8fe; background: transparent; padding: 4px 0;"
+        )
+        self.gpu_name_label.setWordWrap(True)
+        gpu_info_col.addWidget(self.gpu_name_label)
+        row3.addLayout(gpu_info_col)
 
         sg.addLayout(row3)
 
@@ -619,7 +635,8 @@ class MainWindow(QMainWindow):
         power_pct = self.power_slider.value()
         max_temp = self.max_temp_spin.value()
 
-        self._on_log(f"GPU Power: {power_pct}%  |  Max Temp: {max_temp}°C")
+        gpu_info = self._detected_gpu_name or "Unknown"
+        self._on_log(f"GPU: {gpu_info}  |  Power: {power_pct}%  |  Max Temp: {max_temp}°C (recommended: {self._recommended_temp}°C)")
 
         self.mining_thread = MiningThread(
             signals=self.signals,
