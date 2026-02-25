@@ -442,6 +442,12 @@ class MainWindow(QMainWindow):
 
         root.addWidget(settings)
 
+        status_row = QHBoxLayout()
+        status_row.setSpacing(12)
+
+        left_col = QVBoxLayout()
+        left_col.setSpacing(6)
+
         bar = QHBoxLayout()
         bar.setSpacing(10)
 
@@ -462,12 +468,6 @@ class MainWindow(QMainWindow):
         )
         bar.addWidget(self.status_label)
 
-        self.temp_label = QLabel("")
-        self.temp_label.setStyleSheet(
-            "color: #aaaacc; font-weight: bold; background: transparent;"
-        )
-        bar.addWidget(self.temp_label)
-
         self.speed_label = QLabel("")
         self.speed_label.setStyleSheet(
             "color: #f0c040; font-weight: bold; background: transparent;"
@@ -480,7 +480,44 @@ class MainWindow(QMainWindow):
         )
         bar.addWidget(self.count_label)
 
-        root.addLayout(bar)
+        left_col.addLayout(bar)
+        status_row.addLayout(left_col, stretch=1)
+
+        temp_box = QGroupBox("GPU Temp")
+        temp_box.setFixedWidth(130)
+        temp_box.setStyleSheet("""
+            QGroupBox {
+                border: 2px solid #3a3a5c;
+                border-radius: 8px;
+                margin-top: 6px;
+                padding-top: 14px;
+                font-size: 10px;
+                color: #8888aa;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+            }
+        """)
+        temp_layout = QVBoxLayout(temp_box)
+        temp_layout.setContentsMargins(4, 2, 4, 4)
+        temp_layout.setAlignment(Qt.AlignCenter)
+        self.temp_label = QLabel("--°C")
+        self.temp_label.setAlignment(Qt.AlignCenter)
+        self.temp_label.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #50e050; background: transparent;"
+        )
+        temp_layout.addWidget(self.temp_label)
+        self.temp_status_label = QLabel("")
+        self.temp_status_label.setAlignment(Qt.AlignCenter)
+        self.temp_status_label.setStyleSheet(
+            "font-size: 10px; color: #8888aa; background: transparent;"
+        )
+        temp_layout.addWidget(self.temp_status_label)
+        status_row.addWidget(temp_box)
+
+        root.addLayout(status_row)
 
         splitter = QSplitter(Qt.Vertical)
 
@@ -622,18 +659,51 @@ class MainWindow(QMainWindow):
     def _update_gpu_temp(self):
         temp = get_gpu_temp()
         if temp is not None:
-            if temp >= 85:
+            max_t = self.max_temp_spin.value()
+            if temp >= max_t:
                 color = "#ff4040"
-            elif temp >= 75:
+                border_color = "#ff4040"
+                status = "THROTTLED"
+                status_color = "#ff4040"
+            elif temp >= max_t - 10:
                 color = "#f0c040"
+                border_color = "#f0c040"
+                status = "WARM"
+                status_color = "#f0c040"
             else:
                 color = "#50e050"
-            self.temp_label.setText(f"GPU: {temp}°C")
+                border_color = "#3a3a5c"
+                status = "OK"
+                status_color = "#50e050"
+            self.temp_label.setText(f"{temp}°C")
             self.temp_label.setStyleSheet(
-                f"color: {color}; font-weight: bold; background: transparent;"
+                f"font-size: 32px; font-weight: bold; color: {color}; background: transparent;"
             )
+            self.temp_status_label.setText(status)
+            self.temp_status_label.setStyleSheet(
+                f"font-size: 10px; font-weight: bold; color: {status_color}; background: transparent;"
+            )
+            self.temp_label.parent().setStyleSheet(f"""
+                QGroupBox {{
+                    border: 2px solid {border_color};
+                    border-radius: 8px;
+                    margin-top: 6px;
+                    padding-top: 14px;
+                    font-size: 10px;
+                    color: #8888aa;
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    left: 10px;
+                    padding: 0 4px;
+                }}
+            """)
         else:
-            self.temp_label.setText("")
+            self.temp_label.setText("--°C")
+            self.temp_label.setStyleSheet(
+                "font-size: 32px; font-weight: bold; color: #555577; background: transparent;"
+            )
+            self.temp_status_label.setText("N/A")
 
     def _set_controls_enabled(self, enabled):
         self.min_word_spin.setEnabled(enabled)
