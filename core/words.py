@@ -263,10 +263,10 @@ def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file
             words = list(COOL_WORDS)
     if custom_words:
         words = words + custom_words
-    from core.word_filter import TAIL_SIZE
-    effective_max = max_length if max_length > 0 else TAIL_SIZE
     valid = set()
     for word in words:
-        if all(c in BASE58_CHARS for c in word) and min_length <= len(word) <= effective_max:
+        if all(c in BASE58_CHARS for c in word) and len(word) >= min_length:
+            if max_length > 0 and len(word) > max_length:
+                continue
             valid.add(word)
     return sorted(valid, key=lambda w: (-len(w), w))
