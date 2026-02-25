@@ -1,5 +1,6 @@
 import logging
 import platform
+import sys
 from pathlib import Path
 from typing import Tuple
 
@@ -42,7 +43,10 @@ def load_kernel_source(
     for s in suffixes:
         s.extend([0] * (max_suffix_len - len(s)))
 
-    kernel_path = Path(__file__).parent.parent / "opencl" / "kernel.cl"
+    base_path = Path(getattr(sys, '_MEIPASS', Path(__file__).parent.parent.parent))
+    kernel_path = base_path / "core" / "opencl" / "kernel.cl"
+    if not kernel_path.exists():
+        kernel_path = Path(__file__).parent.parent / "opencl" / "kernel.cl"
     if not kernel_path.exists():
         raise FileNotFoundError("Kernel source file not found.")
     with kernel_path.open("r") as f:

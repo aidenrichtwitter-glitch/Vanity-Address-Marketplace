@@ -108,5 +108,6 @@ def list_words(min_length, max_length):
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
     multiprocessing.set_start_method("spawn")
     cli()
