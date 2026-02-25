@@ -260,7 +260,7 @@ class MiningThread(threading.Thread):
                             pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
                             suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
-                            save_keypair(pv_bytes, self.output_dir)
+                            save_keypair(pv_bytes, self.output_dir, word=word)
                             result_count += 1
                             elapsed = time.time() - start_time
                             self.signals.found.emit(

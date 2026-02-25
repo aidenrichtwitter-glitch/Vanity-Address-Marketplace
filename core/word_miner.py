@@ -261,7 +261,7 @@ def run_word_miner(
                         word, padding = word_filter.check_address(pubkey)
                         suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
 
-                        save_keypair(pv_bytes, output_dir)
+                        save_keypair(pv_bytes, output_dir, word=word)
                         result_count += 1
                         elapsed = time.time() - start_time
 
