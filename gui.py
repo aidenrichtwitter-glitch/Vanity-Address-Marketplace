@@ -18,7 +18,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QObject
 from PySide6.QtGui import QFont, QColor
 
 from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
-from core.word_miner import build_suffix_patterns, gpu_word_search
+from core.word_miner import build_suffix_patterns
 from core.config import DEFAULT_ITERATION_BITS
 from core.utils.crypto import get_public_key_from_private_bytes, save_keypair
 
@@ -224,41 +224,38 @@ class MiningThread(threading.Thread):
             result_count = 0
             start_time = time.time()
 
+            from core.word_miner import _persistent_worker
+
             mp_ctx = multiprocessing.get_context("spawn")
-            with mp_ctx.Manager() as manager:
-                with mp_ctx.Pool(processes=gpu_counts) as pool:
-                    while not self._stop_event.is_set():
-                        if 0 < self.count <= result_count:
-                            break
+            workers = []
+            for idx in range(gpu_counts):
+                p_conn, c_conn = mp_ctx.Pipe()
+                proc = mp_ctx.Process(
+                    target=_persistent_worker,
+                    args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn),
+                    daemon=True,
+                )
+                proc.start()
+                workers.append((proc, p_conn))
 
-                        stop_flag = manager.Value("i", 0)
-                        lock = manager.Lock()
+            for _, conn in workers:
+                msg = conn.recv()
+                if isinstance(msg, dict) and msg.get("type") == "ready":
+                    pass
 
-                        async_result = pool.starmap_async(
-                            gpu_word_search,
-                            [
-                                (x, kernel_source, self.iteration_bits,
-                                 gpu_counts, stop_flag, lock, None)
-                                for x in range(gpu_counts)
-                            ],
-                        )
+            self.signals.log.emit(f"Workers running ({gpu_counts} GPU process(es)), mining continuously...")
 
-                        while not async_result.ready():
-                            if self._stop_event.is_set():
-                                pool.terminate()
-                                self.signals.stopped.emit()
-                                return
-                            elapsed = time.time() - start_time
-                            batch_keys = (1 << self.iteration_bits)
-                            speed = batch_keys / max(elapsed, 0.001)
-                            self.signals.speed.emit(f"{speed / 1e6:.2f} MKeys/s")
-                            async_result.wait(0.5)
+            while not self._stop_event.is_set():
+                if 0 < self.count <= result_count:
+                    break
 
-                        results = async_result.get()
-
-                        for output in results:
-                            if not output[0]:
-                                continue
+                for _, conn in workers:
+                    while conn.poll(0):
+                        msg = conn.recv()
+                        if not isinstance(msg, dict):
+                            continue
+                        if msg["type"] == "found":
+                            output = msg["data"]
                             pv_bytes = bytes(output[1:])
                             pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
@@ -272,6 +269,21 @@ class MiningThread(threading.Thread):
                             self.signals.log.emit(
                                 f"[FOUND] #{result_count}: {pubkey} -> {suffix_display}"
                             )
+                        elif msg["type"] == "speed":
+                            speed = msg["value"]
+                            self.signals.speed.emit(f"{speed / 1e6:.2f} MKeys/s")
+                        elif msg["type"] == "error":
+                            self.signals.log.emit(f"[GPU ERROR] {msg['msg']}")
+
+                time.sleep(0.2)
+
+            for _, conn in workers:
+                try:
+                    conn.send("stop")
+                except Exception:
+                    pass
+            for proc, _ in workers:
+                proc.join(timeout=3)
 
             self.signals.status.emit(f"Complete - {result_count} found")
 

@@ -31,6 +31,92 @@ def build_suffix_patterns(word_filter):
     return sorted(set(patterns))
 
 
+_worker_searcher = None
+
+
+def _worker_init(kernel_source, iteration_bits, index, chosen_devices):
+    global _worker_searcher
+    setting = HostSetting(kernel_source, iteration_bits)
+    _worker_searcher = Searcher(
+        kernel_source=kernel_source,
+        index=index,
+        setting=setting,
+        chosen_devices=chosen_devices,
+    )
+
+
+def _worker_search(gpu_counts, stop_flag, lock):
+    global _worker_searcher
+    try:
+        searcher = _worker_searcher
+        searcher.setting.key32 = searcher.setting.generate_key32()
+        i = 0
+        st = time.time()
+        while True:
+            result = searcher.find(i == 0)
+            if result[0]:
+                with lock:
+                    if not stop_flag.value:
+                        stop_flag.value = 1
+                return list(result)
+            if time.time() - st > max(gpu_counts, 1):
+                i = 0
+                st = time.time()
+                with lock:
+                    if stop_flag.value:
+                        return list(result)
+            else:
+                i += 1
+    except Exception as e:
+        logging.exception(e)
+    return [0]
+
+
+def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn):
+    import secrets as _secrets
+    try:
+        setting = HostSetting(kernel_source, iteration_bits)
+        searcher = Searcher(
+            kernel_source=kernel_source,
+            index=index,
+            setting=setting,
+            chosen_devices=chosen_devices,
+        )
+        conn.send({"type": "ready"})
+
+        iterations = 0
+        batch_start = time.time()
+        batch_keys = 1 << iteration_bits
+
+        while True:
+            if conn.poll(0):
+                msg = conn.recv()
+                if msg == "stop":
+                    break
+
+            result = searcher.find(False)
+            iterations += 1
+
+            if result[0]:
+                conn.send({"type": "found", "data": list(result)})
+                searcher.setting.key32 = searcher.setting.generate_key32()
+
+            if iterations % 16 == 0:
+                elapsed = time.time() - batch_start
+                if elapsed > 0:
+                    speed = (iterations * batch_keys) / elapsed
+                    conn.send({"type": "speed", "value": speed})
+                iterations = 0
+                batch_start = time.time()
+
+    except Exception as e:
+        logging.exception(e)
+        try:
+            conn.send({"type": "error", "msg": str(e)})
+        except Exception:
+            pass
+
+
 def gpu_word_search(
     index,
     kernel_source,
