@@ -376,7 +376,7 @@ class MainWindow(QMainWindow):
         wl_row = QHBoxLayout()
         wl_row.setSpacing(4)
         self.wordlist_edit = QLineEdit("")
-        self.wordlist_edit.setPlaceholderText("Built-in word list (1000+ words)")
+        self.wordlist_edit.setPlaceholderText("Default: wordlist_3000.txt (3000 common words)")
         self.wordlist_edit.textChanged.connect(self._load_word_count)
         wl_row.addWidget(self.wordlist_edit)
         browse_wl_btn = QPushButton("Browse")
