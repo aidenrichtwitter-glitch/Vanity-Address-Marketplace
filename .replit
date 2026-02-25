@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["libsodium", "mesa_drivers", "ocl-icd", "opencl-headers"]
+packages = ["libsodium", "libxcrypt", "mesa_drivers", "ocl-icd", "opencl-headers", "libGL", "libxkbcommon", "xorg.libX11", "xorg.libXcursor", "xorg.libXi", "xorg.libXrandr", "fontconfig", "freetype", "qt6.qtbase", "xorg.libxcb", "xorg.libXext", "xorg.libXfixes", "xorg.libXrender", "dbus"]
 
 [workflows]
 runButton = "Project"
@@ -23,8 +23,8 @@ name = "Start application"
 author = "agent"
 
 [workflows.workflow.metadata]
-outputType = "console"
+outputType = "vnc"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python main.py search-words --min-word-length 4 --count 0"
+args = "python gui.py"

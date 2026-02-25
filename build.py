@@ -2,7 +2,7 @@
 """Build standalone executable using PyInstaller.
 
 Run this on the target machine (e.g. Windows with your GPU):
-    pip install pyinstaller pyopencl pynacl base58 click
+    pip install pyinstaller pyopencl pynacl base58 click PySide6
     python build.py
 
 Output: dist/solvanity.exe (Windows) or dist/solvanity (Linux)
@@ -20,7 +20,7 @@ def build():
     cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
-        "--console",
+        "--windowed",
         "--name", "solvanity",
         "--add-data", add_data,
         "--hidden-import", "pyopencl",
@@ -29,8 +29,9 @@ def build():
         "--hidden-import", "nacl.bindings",
         "--hidden-import", "base58",
         "--hidden-import", "click",
+        "--hidden-import", "PySide6",
         "--collect-all", "pyopencl",
-        "main.py",
+        "gui.py",
     ]
     print("=" * 60)
     print("  SolVanity Word Miner - Build")
@@ -49,13 +50,6 @@ def build():
     print("=" * 60)
     print(f"  Build complete!")
     print(f"  Executable: {exe_path}")
-    print()
-    print("  Usage:")
-    print(f"    {exe_path} search-words")
-    print(f"    {exe_path} search-words --min-word-length 5")
-    print(f"    {exe_path} search-words --count 10")
-    print(f"    {exe_path} show-device")
-    print(f"    {exe_path} list-words")
     print("=" * 60)
 
 
