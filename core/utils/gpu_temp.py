@@ -1,8 +1,14 @@
 import subprocess
+import sys
 import logging
 
 _nvml_available = False
 _nvml_initialized = False
+_smi_failed = False
+
+_SUBPROCESS_KWARGS = {}
+if sys.platform == "win32":
+    _SUBPROCESS_KWARGS["creationflags"] = subprocess.CREATE_NO_WINDOW
 
 try:
     import pynvml
@@ -27,55 +33,48 @@ def get_gpu_temp(device_index=0):
     if _nvml_available:
         try:
             if not _init_nvml():
-                return _fallback_nvidia_smi()
+                return _fallback_nvidia_smi("temperature.gpu")
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
             temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
             return int(temp)
         except Exception:
-            return _fallback_nvidia_smi()
-    return _fallback_nvidia_smi()
-
-
-def _fallback_nvidia_smi():
-    try:
-        result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=temperature.gpu", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            temps = result.stdout.strip().split('\n')
-            if temps and temps[0].strip().isdigit():
-                return int(temps[0].strip())
-    except Exception:
-        pass
-    return None
+            return _fallback_nvidia_smi("temperature.gpu")
+    return _fallback_nvidia_smi("temperature.gpu")
 
 
 def get_gpu_name(device_index=0):
     if _nvml_available:
         try:
             if not _init_nvml():
-                return _fallback_gpu_name()
+                return _fallback_nvidia_smi("name")
             handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
             name = pynvml.nvmlDeviceGetName(handle)
             if isinstance(name, bytes):
                 name = name.decode("utf-8", errors="replace")
             return name.strip()
         except Exception:
-            return _fallback_gpu_name()
-    return _fallback_gpu_name()
+            return _fallback_nvidia_smi("name")
+    return _fallback_nvidia_smi("name")
 
 
-def _fallback_gpu_name():
+def _fallback_nvidia_smi(field):
+    global _smi_failed
+    if _smi_failed:
+        return None
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            ["nvidia-smi", f"--query-gpu={field}", "--format=csv,noheader"],
             capture_output=True, text=True, timeout=5,
+            **_SUBPROCESS_KWARGS,
         )
         if result.returncode == 0:
-            names = result.stdout.strip().split('\n')
-            if names and names[0].strip():
-                return names[0].strip()
+            val = result.stdout.strip().split('\n')[0].strip()
+            if val:
+                if field == "temperature.gpu":
+                    return int(val) if val.isdigit() else None
+                return val
+    except FileNotFoundError:
+        _smi_failed = True
     except Exception:
         pass
     return None
