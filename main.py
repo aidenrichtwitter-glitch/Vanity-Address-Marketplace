@@ -8,9 +8,11 @@ os.environ.setdefault("PYOPENCL_CTX", "0:0")
 import click
 
 
-@click.group()
-def cli():
-    pass
+@click.group(invoke_without_command=True)
+@click.pass_context
+def cli(ctx):
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(search_words)
 
 
 @cli.command(name="search-pubkey", context_settings={"show_default": True})
@@ -107,7 +109,24 @@ def list_words(min_length, max_length):
         click.echo("".join(w.ljust(col_width) for w in row))
 
 
+def main():
+    try:
+        cli(standalone_mode=False)
+    except click.exceptions.Abort:
+        pass
+    except KeyboardInterrupt:
+        pass
+    except SystemExit:
+        pass
+    except Exception as e:
+        print(f"\nError: {e}")
+    finally:
+        if getattr(sys, 'frozen', False):
+            print()
+            input("Press Enter to exit...")
+
+
 if __name__ == "__main__":
     multiprocessing.freeze_support()
     multiprocessing.set_start_method("spawn")
-    cli()
+    main()

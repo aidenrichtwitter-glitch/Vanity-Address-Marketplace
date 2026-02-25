@@ -106,8 +106,8 @@ def run_word_miner(
     print()
 
     if not suffix_patterns:
-        logging.error("No valid suffix patterns generated. Check word list and length settings.")
-        sys.exit(1)
+        print("\nERROR: No valid suffix patterns generated. Check word list and length settings.")
+        return
 
     logging.info(f"Sample patterns: {', '.join(suffix_patterns[:10])}{'...' if len(suffix_patterns) > 10 else ''}")
 
@@ -119,17 +119,15 @@ def run_word_miner(
         else:
             gpu_counts = len(get_all_gpu_devices())
     except Exception as e:
-        logging.error(f"OpenCL error: {e}")
-        logging.error("No GPU/OpenCL platform found. This tool requires an OpenCL-capable GPU.")
-        logging.error("Install GPU drivers and OpenCL runtime, then try again.")
-        logging.error("Run 'python main.py show-device' to check available devices.")
-        sys.exit(1)
+        print(f"\nERROR: OpenCL error: {e}")
+        print("No GPU/OpenCL platform found. This tool requires an OpenCL-capable GPU.")
+        print("Install GPU drivers and OpenCL runtime, then try again.")
+        return
 
     if gpu_counts == 0:
-        logging.error("No GPU devices found. This tool requires an OpenCL-capable GPU.")
-        logging.error("Make sure your GPU drivers and OpenCL runtime are installed.")
-        logging.error("Run 'python main.py show-device' to check available devices.")
-        sys.exit(1)
+        print("\nERROR: No GPU devices found. This tool requires an OpenCL-capable GPU.")
+        print("Make sure your GPU drivers and OpenCL runtime are installed.")
+        return
 
     logging.info(f"Using {gpu_counts} GPU device(s)")
 
