@@ -89,9 +89,9 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
         iterations = 0
         batch_start = time.time()
         batch_keys = 1 << iteration_bits
-        throttle_delay = 0.0
         last_temp_check = 0.0
-        is_throttled = False
+        throttle_level = 0
+        cooldown_until = 0.0
 
         base_delay = 0.0
         if power_pct < 100:
@@ -103,34 +103,43 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
                 if msg == "stop":
                     break
 
-            iter_start = time.time()
+            now = time.time()
+            if now < cooldown_until:
+                time.sleep(min(0.5, cooldown_until - now))
+                continue
+
             result = searcher.find(False)
-            iter_time = time.time() - iter_start
             iterations += 1
 
             if result[0]:
                 conn.send({"type": "found", "data": list(result)})
                 searcher.setting.key32 = searcher.setting.generate_key32()
 
-            sleep_time = base_delay
-            if time.time() - last_temp_check > 2.0:
-                last_temp_check = time.time()
+            now = time.time()
+            if now - last_temp_check > 2.0:
+                last_temp_check = now
                 temp = _get_temp()
                 if temp is not None:
                     conn.send({"type": "temp", "value": temp})
-                    if temp >= max_temp:
-                        over = temp - max_temp
-                        throttle_delay = iter_time * (0.5 + over * 0.3)
-                        if not is_throttled:
-                            is_throttled = True
-                            conn.send({"type": "log", "msg": f"Auto-throttle: GPU at {temp}°C (limit {max_temp}°C)"})
-                    elif temp < max_temp - 5:
-                        if is_throttled:
-                            throttle_delay = 0.0
-                            is_throttled = False
-                            conn.send({"type": "log", "msg": f"Auto-throttle off: GPU cooled to {temp}°C"})
+                    over = temp - max_temp
+                    if over >= 0:
+                        new_level = min(int(over) + 1, 10)
+                        if new_level != throttle_level:
+                            throttle_level = new_level
+                            conn.send({"type": "log", "msg": f"Throttle level {throttle_level}: GPU at {temp}°C (limit {max_temp}°C)"})
+                        if over >= 3:
+                            pause = 3.0 + over * 1.0
+                            cooldown_until = now + pause
+                            conn.send({"type": "log", "msg": f"Hard pause {pause:.0f}s: GPU {temp}°C is {over:.0f}°C over limit"})
+                            continue
+                    elif temp <= max_temp - 8:
+                        if throttle_level > 0:
+                            throttle_level = 0
+                            conn.send({"type": "log", "msg": f"Throttle off: GPU cooled to {temp}°C"})
 
-            sleep_time = max(base_delay, throttle_delay)
+            sleep_time = base_delay
+            if throttle_level > 0:
+                sleep_time = max(sleep_time, 0.05 * throttle_level)
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
