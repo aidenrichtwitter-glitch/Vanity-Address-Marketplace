@@ -674,13 +674,8 @@ class MainWindow(QMainWindow):
         word_filter = WordFilter(min_length=min_len, wordlist_file=wl_file)
         suffix_patterns = build_suffix_patterns(word_filter)
 
-        from core.word_miner import MAX_GPU_PATTERNS
         source = f"from {wl_file}" if wl_file else "from built-in list"
-        total_words = len(word_filter.words)
-        if total_words > len(suffix_patterns):
-            self._on_log(f"Loaded {total_words} words ({source}), capped to {len(suffix_patterns)} GPU patterns (max {MAX_GPU_PATTERNS}, longest words prioritized)")
-        else:
-            self._on_log(f"Loaded {total_words} words ({source}), {len(suffix_patterns)} suffix patterns")
+        self._on_log(f"Loaded {len(word_filter.words)} words ({source}), {len(suffix_patterns)} suffix patterns")
         pad_example = "X" * max(0, TAIL_SIZE - min_len)
         self._on_log(f"Tail pattern: {pad_example}<word> (last {TAIL_SIZE} chars of address)")
         self._on_log(f"Sample: {', '.join(suffix_patterns[:6])}...")

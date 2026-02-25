@@ -18,9 +18,6 @@ from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
 logging.basicConfig(level="INFO", format="[%(levelname)s %(asctime)s] %(message)s")
 
 
-MAX_GPU_PATTERNS = 2000
-
-
 def build_suffix_patterns(word_filter):
     patterns = []
     for word in word_filter.words:
@@ -31,10 +28,7 @@ def build_suffix_patterns(word_filter):
             pad_needed = TAIL_SIZE - wlen
             pattern = (PAD_CHAR * pad_needed) + word
             patterns.append(pattern)
-    unique = sorted(set(patterns), key=lambda p: (-len(p), p))
-    if len(unique) > MAX_GPU_PATTERNS:
-        unique = unique[:MAX_GPU_PATTERNS]
-    return unique
+    return sorted(set(patterns))
 
 
 _worker_searcher = None
