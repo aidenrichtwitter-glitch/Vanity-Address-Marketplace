@@ -22,9 +22,9 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python main.py --no-gpu --gpu-batch-size 1024 --threads 2 --min-word-length 4"
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py search-words --threads 2 --min-word-length 4 --batch-size 1000"

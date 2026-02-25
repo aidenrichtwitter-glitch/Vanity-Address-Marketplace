@@ -1,45 +1,42 @@
-# SolVanity - Solana Vanity Address Miner
+# SolVanity Word Miner (SolVanityCL Fork)
 
 ## Overview
-GPU-accelerated Solana vanity address miner inspired by solvanityCL. Uses a two-stage filtering pipeline:
-1. **Stage 1 (GPU/fast)**: Mass-generate Ed25519 keypairs and filter by case-sensitive suffix/prefix matching
-2. **Stage 2 (CPU)**: Check filtered addresses for cool/interesting English words embedded in the Base58 address
+A fork of [SolVanityCL](https://github.com/WincerChan/SolVanityCL) that adds CPU-based word suffix filtering on top of GPU-accelerated Solana vanity address mining.
+
+The word miner looks for addresses where the last 6 characters form a pattern: uppercase Base58 padding + a cool word. For example:
+- `...XXomen` (2 uppercase pad + 4-letter word)
+- `...Xdream` (1 uppercase pad + 5-letter word)  
+- `...dragon` (6-letter word, no padding needed)
 
 ## Architecture
-- `main.py` - Entry point, CLI argument parsing and validation
-- `src/config.py` - Argument parser configuration
-- `src/crypto.py` - Solana keypair generation (Ed25519 via PyNaCl), Base58 encoding, key export
-- `src/gpu_miner.py` - OpenCL GPU kernel for batch seed generation, CPU fallback generator
-- `src/miner.py` - Main mining orchestrator with producer/consumer threading model
-- `src/word_filter.py` - Cool word detection engine with scoring system
-- `src/words.py` - Dictionary of ~1500+ cool words valid in Base58 encoding
-- `src/display.py` - Rich terminal UI with live stats dashboard
+- `main.py` - Entry point with click CLI (search-pubkey, search-words, show-device, list-words)
+- `core/cli.py` - Original SolVanityCL GPU search command
+- `core/searcher.py` - GPU searcher using OpenCL (original SolVanityCL)
+- `core/config.py` - Host settings for GPU kernel (original SolVanityCL)
+- `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (original SolVanityCL)
+- `core/opencl/manager.py` - OpenCL device manager (original SolVanityCL)
+- `core/word_miner.py` - CPU word mining engine with live Rich dashboard
+- `core/word_filter.py` - Suffix word detection with uppercase padding check (6-char tail)
+- `core/words.py` - Dictionary of ~1500+ cool words valid in Base58
+- `core/utils/crypto.py` - Ed25519 keypair generation and saving
+- `core/utils/helpers.py` - Kernel source loader and Base58 validation
 
 ## Dependencies
-- **pynacl** - Ed25519 key generation (libsodium bindings)
+- **click** - CLI framework
+- **pyopencl** - GPU acceleration (required for search-pubkey, optional for search-words)
+- **pynacl** - Ed25519 key generation
 - **base58** - Base58 encoding for Solana addresses
-- **rich** - Terminal UI with live updating dashboard
-- **pyopencl** - OpenCL GPU acceleration (optional, falls back to CPU)
+- **rich** - Terminal dashboard UI
 
-## Usage
+## Commands
 ```bash
-python main.py                           # Mine with defaults (CPU, 4+ letter words)
-python main.py --suffix abc              # Require addresses ending in "abc"
-python main.py --prefix XYZ              # Require addresses starting with "XYZ"
-python main.py --min-word-length 5       # Only find 5+ letter words
-python main.py --custom-words sol,moon   # Add custom words to search
-python main.py --gpu-only --suffix dead  # Only suffix match, no word check
-python main.py --list-words              # Show all valid cool words
-python main.py --no-gpu                  # Force CPU-only mode
+python main.py search-words              # Mine for word-ending addresses (CPU)
+python main.py search-words --threads 4  # Use 4 CPU threads
+python main.py search-words --min-word-length 5  # Only 5+ letter words
+python main.py search-pubkey --ends-with pump     # Original GPU suffix search
+python main.py show-device               # List OpenCL GPU devices
+python main.py list-words                # Show all valid words
 ```
 
 ## Output
-Found addresses are saved to `found_addresses.txt` with the address, words found, and full 64-byte secret key (compatible with Solana CLI).
-
-## How It Works
-- GPU (or CPU fallback) generates random 32-byte seeds in batches
-- Each seed creates an Ed25519 signing key → public key → Base58 Solana address
-- Stage 1: Quick suffix/prefix filter (case-sensitive by default)
-- Stage 2: CPU scans remaining addresses for dictionary words
-- Addresses with words are scored (longer words = higher score) and saved
-- Live terminal dashboard shows speed, matches, and best finds
+Found keypairs saved as `{address}.json` in `found_words/` directory, compatible with Solana CLI (`solana-keygen pubkey file.json`).

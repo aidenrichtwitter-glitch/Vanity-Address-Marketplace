@@ -5,6 +5,9 @@ __pycache__/
 dist/
 build/
 .eggs/
+found_words/
 found_addresses.txt
+*.json
+!package.json
 *.log
 .env
