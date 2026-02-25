@@ -12,9 +12,9 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QTextEdit,
-    QFileDialog, QSplitter, QSlider,
+    QFileDialog, QSplitter, QSlider, QFrame,
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+from PySide6.QtCore import Qt, QTimer, Signal, QObject, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
 
 from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
@@ -332,9 +332,41 @@ class MainWindow(QMainWindow):
         sub.setStyleSheet("font-size: 11px; color: #7878a0; padding-bottom: 4px; background: transparent;")
         root.addWidget(sub)
 
-        settings = QGroupBox("Mining Settings")
-        sg = QVBoxLayout(settings)
+        self.settings_toggle = QPushButton("▼  Mining Settings")
+        self.settings_toggle.setStyleSheet("""
+            QPushButton {
+                background-color: #222244;
+                border: 1px solid #3a3a5c;
+                border-radius: 6px;
+                color: #b0b0dd;
+                font-weight: bold;
+                font-size: 12px;
+                text-align: left;
+                padding: 8px 14px;
+            }
+            QPushButton:hover {
+                background-color: #2a2a55;
+                border-color: #5050aa;
+            }
+        """)
+        self.settings_toggle.setCursor(Qt.PointingHandCursor)
+        self.settings_toggle.clicked.connect(self._toggle_settings)
+        root.addWidget(self.settings_toggle)
+
+        self.settings_content = QWidget()
+        self.settings_content.setStyleSheet("""
+            QWidget#settingsContent {
+                background-color: #222244;
+                border: 1px solid #3a3a5c;
+                border-top: none;
+                border-radius: 0 0 6px 6px;
+                padding: 10px;
+            }
+        """)
+        self.settings_content.setObjectName("settingsContent")
+        sg = QVBoxLayout(self.settings_content)
         sg.setSpacing(10)
+        sg.setContentsMargins(10, 10, 10, 10)
 
         row1 = QHBoxLayout()
         row1.setSpacing(20)
@@ -456,7 +488,7 @@ class MainWindow(QMainWindow):
 
         sg.addLayout(row3)
 
-        root.addWidget(settings)
+        root.addWidget(self.settings_content)
 
         status_row = QHBoxLayout()
         status_row.setSpacing(12)
@@ -598,6 +630,14 @@ class MainWindow(QMainWindow):
             self.words_label.setText(f"Words: {len(wf.words)}  |  Patterns: {len(patterns)}  ({source})")
         except Exception as e:
             self.words_label.setText(f"Words: error ({e})")
+
+    def _toggle_settings(self):
+        visible = self.settings_content.isVisible()
+        self.settings_content.setVisible(not visible)
+        if visible:
+            self.settings_toggle.setText("▶  Mining Settings")
+        else:
+            self.settings_toggle.setText("▼  Mining Settings")
 
     def _browse_dir(self):
         d = QFileDialog.getExistingDirectory(self, "Select Output Directory")

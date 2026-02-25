@@ -252,6 +252,33 @@ def _get_default_wordlist_path():
     return None
 
 
+def _get_program_dir():
+    import sys
+    from pathlib import Path
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).parent
+    return Path(__file__).parent.parent
+
+
+def _apply_l_to_1(words):
+    expanded = list(words)
+    for word in words:
+        if 'l' in word:
+            expanded.append(word.replace('l', '1'))
+    return expanded
+
+
+def _save_processed_wordlist(valid_words):
+    from pathlib import Path
+    try:
+        wl_dir = _get_program_dir() / "wordlists"
+        wl_dir.mkdir(parents=True, exist_ok=True)
+        out = wl_dir / "processed_wordlist.txt"
+        out.write_text("\n".join(valid_words) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
 def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file=None):
     if wordlist_file:
         words = load_words_from_file(wordlist_file)
@@ -263,10 +290,13 @@ def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file
             words = list(COOL_WORDS)
     if custom_words:
         words = words + custom_words
+    words = _apply_l_to_1(words)
     valid = set()
     for word in words:
         if all(c in BASE58_CHARS for c in word) and len(word) >= min_length:
             if max_length > 0 and len(word) > max_length:
                 continue
             valid.add(word)
-    return sorted(valid, key=lambda w: (-len(w), w))
+    result = sorted(valid, key=lambda w: (-len(w), w))
+    _save_processed_wordlist(result)
+    return result
