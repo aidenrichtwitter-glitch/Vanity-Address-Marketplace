@@ -8,13 +8,10 @@ typedef unsigned long uint64_t;
 typedef long int64_t;
 typedef int32_t fe[10];
 
-// DO NOT EDIT BELOW 7 LINES BY HAND -- CHANGES WILL BE OVERWRITTEN
+// DO NOT EDIT BELOW 5 LINES BY HAND -- CHANGES WILL BE OVERWRITTEN
 #define N 1
 #define L 3
-#define M 1
-#define K 0
 constant uchar PREFIXES[N][L] = {{83, 111, 76}};
-constant uchar SUFFIXES[M][K] = {{}};
 constant bool CASE_SENSITIVE = true;
 // DO NOT EDIT ABOVE THIS LINE -- END OF AUTO-GENERATED CODE
 
@@ -3737,7 +3734,10 @@ static uchar * base58_encode(uchar *in, size_t *out_len, uchar *out) {
 
 __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
                               global uchar *occupied_bytes,
-                              global uchar *group_offset) {
+                              global uchar *group_offset,
+                              global const uchar *suffixes,
+                              uint suffix_count,
+                              uint suffix_width) {
   uchar public_key[32] __attribute__((aligned(4)));
   uchar private_key[64];
   uchar key_base[32];
@@ -3776,17 +3776,16 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
 
   // suffix matching
   unsigned int suffix_matched = 1;
-  if (K > 0) {
+  if (suffix_width > 0 && suffix_count > 0) {
     suffix_matched = 0;
-    #pragma unroll
-    for (size_t s = 0; s < M; s++) {
+    for (size_t s = 0; s < suffix_count; s++) {
       unsigned int suffix_mismatch = 0;
       size_t suf_len = 0;
-      for (size_t i = 0; i < K; i++) {
-        if (SUFFIXES[s][i] != 0) suf_len = i + 1;
+      for (size_t i = 0; i < suffix_width; i++) {
+        if (suffixes[s * suffix_width + i] != 0) suf_len = i + 1;
       }
       for (size_t i = 0; i < suf_len; i++) {
-        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(alphabet_indices[SUFFIXES[s][i]]);
+        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(alphabet_indices[suffixes[s * suffix_width + i]]);
       }
       if (!suffix_mismatch && suf_len > 0) {
         suffix_matched = 1;

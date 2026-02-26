@@ -2,6 +2,7 @@ import logging
 import time
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pyopencl as cl
 
 from core.config import HostSetting
@@ -18,6 +19,9 @@ class Searcher:
         index: int,
         setting: HostSetting,
         chosen_devices: Optional[Tuple[int, List[int]]] = None,
+        suffix_buffer: bytearray = None,
+        suffix_count: int = 0,
+        suffix_width: int = 0,
     ):
         if chosen_devices is None:
             devices = get_all_gpu_devices()
@@ -54,11 +58,26 @@ class Searcher:
             cl.mem_flags.READ_WRITE | cl.mem_flags.COPY_HOST_PTR,
             hostbuf=bytearray([self.index]),
         )
+
+        if suffix_buffer is None or len(suffix_buffer) == 0:
+            suffix_buffer = bytearray(1)
+        self.suffix_count = suffix_count
+        self.suffix_width = suffix_width
+        self.memobj_suffixes = cl.Buffer(
+            self.context,
+            cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+            len(suffix_buffer),
+            hostbuf=suffix_buffer,
+        )
+
         self.output = bytearray(33)
         self.kernel.set_arg(0, self.memobj_key32)
         self.kernel.set_arg(1, self.memobj_output)
         self.kernel.set_arg(2, self.memobj_occupied_bytes)
         self.kernel.set_arg(3, self.memobj_group_offset)
+        self.kernel.set_arg(4, self.memobj_suffixes)
+        self.kernel.set_arg(5, np.uint32(self.suffix_count))
+        self.kernel.set_arg(6, np.uint32(self.suffix_width))
 
     def find(self, log_stats: bool = True) -> bytearray:
         start_time = time.time()
@@ -91,6 +110,9 @@ def multi_gpu_init(
     stop_flag,
     lock,
     chosen_devices: Optional[Tuple[int, List[int]]] = None,
+    suffix_buffer: bytearray = None,
+    suffix_count: int = 0,
+    suffix_width: int = 0,
 ) -> List:
     try:
         searcher = Searcher(
@@ -98,6 +120,9 @@ def multi_gpu_init(
             index=index,
             setting=setting,
             chosen_devices=chosen_devices,
+            suffix_buffer=suffix_buffer,
+            suffix_count=suffix_count,
+            suffix_width=suffix_width,
         )
         i = 0
         st = time.time()

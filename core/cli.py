@@ -13,7 +13,7 @@ from core.opencl.manager import (
     get_chosen_devices,
 )
 from core.searcher import multi_gpu_init, save_result
-from core.utils.helpers import check_character, load_kernel_source
+from core.utils.helpers import build_suffix_buffer, check_character, load_kernel_source
 
 logging.basicConfig(level="INFO", format="[%(levelname)s %(asctime)s] %(message)s")
 
@@ -139,8 +139,9 @@ def search_pubkey(
     with multiprocessing.Manager() as manager:
         with Pool(processes=gpu_counts) as pool:
             kernel_source = load_kernel_source(
-                prefix_patterns, suffix_patterns, is_case_sensitive
+                prefix_patterns, is_case_sensitive
             )
+            suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_patterns)
             lock = manager.Lock()
             while result_count < count:
                 stop_flag = manager.Value("i", 0)
@@ -154,6 +155,9 @@ def search_pubkey(
                             stop_flag,
                             lock,
                             chosen_devices,
+                            suffix_buf,
+                            suffix_cnt,
+                            suffix_w,
                         )
                         for x in range(gpu_counts)
                     ],

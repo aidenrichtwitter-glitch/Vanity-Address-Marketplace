@@ -12,7 +12,7 @@ from core.config import DEFAULT_ITERATION_BITS, HostSetting
 from core.opencl.manager import get_all_gpu_devices, get_chosen_devices
 from core.searcher import Searcher
 from core.utils.crypto import get_public_key_from_private_bytes, save_keypair
-from core.utils.helpers import load_kernel_source
+from core.utils.helpers import build_suffix_buffer, load_kernel_source
 from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
 
 logging.basicConfig(level="INFO", format="[%(levelname)s %(asctime)s] %(message)s")
@@ -34,7 +34,8 @@ def build_suffix_patterns(word_filter):
 _worker_searcher = None
 
 
-def _worker_init(kernel_source, iteration_bits, index, chosen_devices):
+def _worker_init(kernel_source, iteration_bits, index, chosen_devices,
+                 suffix_buffer=None, suffix_count=0, suffix_width=0):
     global _worker_searcher
     setting = HostSetting(kernel_source, iteration_bits)
     _worker_searcher = Searcher(
@@ -42,6 +43,9 @@ def _worker_init(kernel_source, iteration_bits, index, chosen_devices):
         index=index,
         setting=setting,
         chosen_devices=chosen_devices,
+        suffix_buffer=suffix_buffer,
+        suffix_count=suffix_count,
+        suffix_width=suffix_width,
     )
 
 
@@ -73,7 +77,8 @@ def _worker_search(gpu_counts, stop_flag, lock):
 
 
 def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn,
-                       power_pct=100, max_temp=80):
+                       power_pct=100, max_temp=80,
+                       suffix_buffer=None, suffix_count=0, suffix_width=0):
     try:
         from core.utils.gpu_temp import get_gpu_temp as _get_temp
 
@@ -83,6 +88,9 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
             index=index,
             setting=setting,
             chosen_devices=chosen_devices,
+            suffix_buffer=suffix_buffer,
+            suffix_count=suffix_count,
+            suffix_width=suffix_width,
         )
         conn.send({"type": "ready"})
 
@@ -177,6 +185,9 @@ def gpu_word_search(
     stop_flag,
     lock,
     chosen_devices,
+    suffix_buffer=None,
+    suffix_count=0,
+    suffix_width=0,
 ):
     try:
         setting = HostSetting(kernel_source, iteration_bits)
@@ -185,6 +196,9 @@ def gpu_word_search(
             index=index,
             setting=setting,
             chosen_devices=chosen_devices,
+            suffix_buffer=suffix_buffer,
+            suffix_count=suffix_count,
+            suffix_width=suffix_width,
         )
         i = 0
         st = time.time()
@@ -270,7 +284,8 @@ def run_word_miner(
     logging.info(f"Using {gpu_counts} GPU device(s)")
 
     suffix_tuple = tuple(suffix_patterns)
-    kernel_source = load_kernel_source((), suffix_tuple, True)
+    kernel_source = load_kernel_source((), True)
+    suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_tuple)
 
     logging.info("GPU kernel compiled with %d suffix patterns", len(suffix_patterns))
     logging.info("Mining started - press Ctrl+C to stop")
@@ -299,6 +314,9 @@ def run_word_miner(
                                 stop_flag,
                                 lock,
                                 chosen_devices,
+                                suffix_buf,
+                                suffix_cnt,
+                                suffix_w,
                             )
                             for x in range(gpu_counts)
                         ],

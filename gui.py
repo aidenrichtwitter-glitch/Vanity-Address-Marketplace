@@ -192,7 +192,7 @@ class MiningThread(threading.Thread):
 
     def run(self):
         try:
-            from core.utils.helpers import load_kernel_source
+            from core.utils.helpers import build_suffix_buffer, load_kernel_source
             from core.opencl.manager import get_all_gpu_devices
 
             try:
@@ -218,9 +218,10 @@ class MiningThread(threading.Thread):
             self.signals.status.emit("Compiling kernel...")
 
             suffix_tuple = tuple(self.suffix_patterns)
-            kernel_source = load_kernel_source((), suffix_tuple, True)
+            kernel_source = load_kernel_source((), True)
+            suffix_buffer, suffix_count, suffix_width = build_suffix_buffer(suffix_tuple)
 
-            self.signals.log.emit(f"Kernel compiled with {len(self.suffix_patterns)} patterns")
+            self.signals.log.emit(f"Kernel compiled with {len(self.suffix_patterns)} patterns ({suffix_count * suffix_width} bytes in global memory)")
             self.signals.status.emit("Mining...")
 
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
@@ -238,6 +239,9 @@ class MiningThread(threading.Thread):
                     target=_persistent_worker,
                     args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn,
                           self.power_pct, self.max_temp),
+                    kwargs={"suffix_buffer": suffix_buffer,
+                            "suffix_count": suffix_count,
+                            "suffix_width": suffix_width},
                     daemon=True,
                 )
                 proc.start()

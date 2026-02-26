@@ -8,7 +8,7 @@ A desktop GUI application (PySide6/Qt) that mines Solana vanity addresses using 
 - `...adventure` (9-letter word, full match)
 - `...go1d` (l→1 substitution: "gold")
 
-All suffix patterns (variable length) are compiled directly into the OpenCL kernel for full GPU throughput.
+Suffix patterns are passed to the GPU via global memory buffers (not constant memory), allowing unlimited pattern count without hitting the 64KB constant memory limit.
 
 ## GPU Setup
 Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capable GPU.**
