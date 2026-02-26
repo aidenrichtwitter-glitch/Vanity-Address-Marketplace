@@ -284,8 +284,8 @@ def run_word_miner(
     logging.info(f"Using {gpu_counts} GPU device(s)")
 
     suffix_tuple = tuple(suffix_patterns)
-    kernel_source = load_kernel_source((), True)
     suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_tuple)
+    kernel_source = load_kernel_source((), True, suffix_bytes=len(suffix_buf) if suffix_cnt > 0 else 0)
 
     logging.info("GPU kernel compiled with %d suffix patterns", len(suffix_patterns))
     logging.info("Mining started - press Ctrl+C to stop")

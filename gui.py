@@ -218,10 +218,11 @@ class MiningThread(threading.Thread):
             self.signals.status.emit("Compiling kernel...")
 
             suffix_tuple = tuple(self.suffix_patterns)
-            kernel_source = load_kernel_source((), True)
             suffix_buffer, suffix_count, suffix_width = build_suffix_buffer(suffix_tuple)
+            kernel_source = load_kernel_source((), True, suffix_bytes=len(suffix_buffer) if suffix_count > 0 else 0)
 
-            self.signals.log.emit(f"Kernel compiled with {len(self.suffix_patterns)} patterns ({suffix_count * suffix_width} bytes in global memory)")
+            mem_type = "local" if (suffix_count * suffix_width) <= 46080 else "global"
+            self.signals.log.emit(f"Kernel compiled with {len(self.suffix_patterns)} patterns ({suffix_count * suffix_width} bytes in {mem_type} memory)")
             self.signals.status.emit("Mining...")
 
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)

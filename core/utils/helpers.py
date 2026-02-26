@@ -39,7 +39,8 @@ def build_suffix_buffer(ends_with_list: Tuple[str, ...]) -> Tuple[bytearray, int
 
 
 def load_kernel_source(
-    starts_with_list: Tuple[str, ...], is_case_sensitive: bool
+    starts_with_list: Tuple[str, ...], is_case_sensitive: bool,
+    suffix_bytes: int = 0,
 ) -> str:
     prefixes = (
         [list(prefix.encode()) for prefix in starts_with_list]
@@ -76,6 +77,8 @@ def load_kernel_source(
             source_lines[i] = (
                 f"constant bool CASE_SENSITIVE = {str(is_case_sensitive).lower()};\n"
             )
+        elif line.startswith("#define SUFFIX_BYTES"):
+            source_lines[i] = f"#define SUFFIX_BYTES {suffix_bytes}\n"
 
     source_str = "".join(source_lines)
     if "NVIDIA" in str(cl.get_platforms()) and platform.system() == "Windows":

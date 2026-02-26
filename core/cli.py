@@ -138,10 +138,11 @@ def search_pubkey(
     result_count = 0
     with multiprocessing.Manager() as manager:
         with Pool(processes=gpu_counts) as pool:
-            kernel_source = load_kernel_source(
-                prefix_patterns, is_case_sensitive
-            )
             suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_patterns)
+            kernel_source = load_kernel_source(
+                prefix_patterns, is_case_sensitive,
+                suffix_bytes=len(suffix_buf) if suffix_cnt > 0 else 0,
+            )
             lock = manager.Lock()
             while result_count < count:
                 stop_flag = manager.Value("i", 0)
