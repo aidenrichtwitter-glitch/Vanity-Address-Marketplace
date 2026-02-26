@@ -7,7 +7,7 @@ import click
 import pyopencl as cl
 
 os.environ["PYOPENCL_COMPILER_OUTPUT"] = "1"
-os.environ["PYOPENCL_NO_CACHE"] = "TRUE"
+os.environ.setdefault("PYOPENCL_NO_CACHE", "FALSE")
 
 
 def get_all_gpu_devices() -> List[cl.Device]:

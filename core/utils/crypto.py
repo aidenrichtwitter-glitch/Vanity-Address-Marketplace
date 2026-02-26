@@ -15,13 +15,14 @@ def get_public_key_from_private_bytes(pv_bytes: bytes) -> str:
     return b58encode(pb_bytes).decode()
 
 
-def save_keypair(pv_bytes: bytes, output_dir: str, word: str = None) -> str:
+def save_keypair(pv_bytes: bytes, output_dir: str, word: str = None, pubkey: str = None) -> str:
     """
     Save address and private key to txt file, return public key
     """
     pv = SigningKey(pv_bytes)
     pb_bytes = bytes(pv.verify_key)
-    pubkey = b58encode(pb_bytes).decode()
+    if pubkey is None:
+        pubkey = b58encode(pb_bytes).decode()
     privkey = b58encode(pv_bytes + pb_bytes).decode()
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     filename = f"{word}.txt" if word else f"{pubkey}.txt"

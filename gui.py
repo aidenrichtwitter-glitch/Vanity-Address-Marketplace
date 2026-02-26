@@ -167,7 +167,7 @@ class MiningSignals(QObject):
     found = Signal(str, str, str, int)
     log = Signal(str)
     status = Signal(str)
-    speed = Signal(str)
+    speed = Signal(float)
     error = Signal(str)
     stopped = Signal()
     gpu_detected = Signal(str, int)
@@ -218,7 +218,7 @@ class MiningThread(threading.Thread):
             self.signals.status.emit("Compiling kernel...")
 
             suffix_tuple = tuple(self.suffix_patterns)
-            suffix_buffer, suffix_count, suffix_width = build_suffix_buffer(suffix_tuple)
+            suffix_buffer, suffix_count, suffix_width, suffix_lengths = build_suffix_buffer(suffix_tuple)
             kernel_source = load_kernel_source((), True, suffix_bytes=len(suffix_buffer) if suffix_count > 0 else 0)
 
             mem_type = "local" if (suffix_count * suffix_width) <= 46080 else "global"
@@ -242,7 +242,8 @@ class MiningThread(threading.Thread):
                           self.power_pct, self.max_temp),
                     kwargs={"suffix_buffer": suffix_buffer,
                             "suffix_count": suffix_count,
-                            "suffix_width": suffix_width},
+                            "suffix_width": suffix_width,
+                            "suffix_lengths": suffix_lengths},
                     daemon=True,
                 )
                 proc.start()
@@ -270,7 +271,7 @@ class MiningThread(threading.Thread):
                             pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
                             suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
-                            save_keypair(pv_bytes, self.output_dir, word=word)
+                            save_keypair(pv_bytes, self.output_dir, word=word, pubkey=pubkey)
                             result_count += 1
                             elapsed = time.time() - start_time
                             self.signals.found.emit(
@@ -281,7 +282,7 @@ class MiningThread(threading.Thread):
                             )
                         elif msg["type"] == "speed":
                             speed = msg["value"]
-                            self.signals.speed.emit(f"{speed / 1e6:.2f} MKeys/s")
+                            self.signals.speed.emit(speed)
                         elif msg["type"] == "temp":
                             pass
                         elif msg["type"] == "log":
@@ -617,6 +618,14 @@ class MainWindow(QMainWindow):
         self.timer = QTimer()
         self.timer.timeout.connect(self._update_elapsed)
 
+        self._total_keys = 0
+        self._last_speed_raw = 0.0
+        self._suffix_pattern_count = 0
+
+        self._word_count_timer = QTimer()
+        self._word_count_timer.setSingleShot(True)
+        self._word_count_timer.timeout.connect(self._do_load_word_count)
+
         self._last_temp_value = None
         self._last_temp_zone = None
         self._temp_lock = threading.Lock()
@@ -630,6 +639,9 @@ class MainWindow(QMainWindow):
         self.temp_timer.start(2000)
 
     def _load_word_count(self):
+        self._word_count_timer.start(400)
+
+    def _do_load_word_count(self):
         try:
             wl_file = self.wordlist_edit.text().strip() or None
             wf = WordFilter(
@@ -725,6 +737,10 @@ class MainWindow(QMainWindow):
 
         gpu_info = self._detected_gpu_name or "Unknown"
         self._on_log(f"GPU: {gpu_info}  |  Power: {power_pct}%  |  Max Temp: {max_temp}°C (recommended: {self._recommended_temp}°C)")
+
+        self._total_keys = 0
+        self._last_speed_raw = 0.0
+        self._suffix_pattern_count = len(suffix_patterns)
 
         self.mining_thread = MiningThread(
             signals=self.signals,
@@ -871,8 +887,39 @@ class MainWindow(QMainWindow):
     def _on_status(self, msg):
         self.status_label.setText(msg)
 
-    def _on_speed(self, msg):
-        self.speed_label.setText(msg)
+    def _on_speed(self, speed_val):
+        self._last_speed_raw = speed_val
+        if self.start_time and speed_val > 0:
+            elapsed = time.time() - self.start_time
+            self._total_keys = int(speed_val * elapsed)
+
+        def _fmt_keys(n):
+            if n >= 1e9:
+                return f"{n / 1e9:.1f}B"
+            if n >= 1e6:
+                return f"{n / 1e6:.1f}M"
+            if n >= 1e3:
+                return f"{n / 1e3:.0f}K"
+            return str(n)
+
+        speed_str = f"{speed_val / 1e6:.2f} MKeys/s"
+        if self._total_keys > 0:
+            speed_str += f"  |  {_fmt_keys(self._total_keys)} checked"
+
+        if self._suffix_pattern_count > 0 and speed_val > 0:
+            prob_per_key = self._suffix_pattern_count / (58 ** 6)
+            if prob_per_key > 0:
+                expected_keys = 1.0 / prob_per_key
+                remaining = max(0, expected_keys - self._total_keys)
+                eta_secs = remaining / speed_val
+                if eta_secs < 60:
+                    speed_str += f"  |  ~{eta_secs:.0f}s ETA"
+                elif eta_secs < 3600:
+                    speed_str += f"  |  ~{eta_secs / 60:.1f}m ETA"
+                else:
+                    speed_str += f"  |  ~{eta_secs / 3600:.1f}h ETA"
+
+        self.speed_label.setText(speed_str)
 
     def _on_error(self, msg):
         self.status_label.setText("Error")

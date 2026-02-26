@@ -78,3 +78,12 @@ Found keypairs saved as `{word}.txt` (e.g., `dream.txt`, `go1d.txt`) in the outp
 - PID thermal controller smoothly adjusts delay to hold GPU at target temperature
 - Temperature polling runs in background thread to avoid UI lag
 - nvidia-smi subprocess uses CREATE_NO_WINDOW on Windows to prevent console flicker
+- Suffix lengths pre-computed on host and passed as separate buffer (eliminates per-work-item length scan in kernel)
+- Suffix bytes pre-encoded as base58 indices on host (eliminates alphabet_indices lookup per comparison in kernel)
+- OpenCL kernel caching enabled (PYOPENCL_NO_CACHE=FALSE) for faster startup
+- Local work size increased to 64 for better GPU occupancy
+- increase_key32 uses byte-level arithmetic instead of Python big-integer conversion
+- save_keypair accepts pre-computed pubkey to avoid redundant Ed25519 derivation
+- Word count loading debounced (400ms) to prevent UI lag while typing
+- Speed reports time-based (~2s intervals) instead of iteration-count-based
+- GUI shows total keys checked and probability-based ETA

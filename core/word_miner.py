@@ -35,7 +35,8 @@ _worker_searcher = None
 
 
 def _worker_init(kernel_source, iteration_bits, index, chosen_devices,
-                 suffix_buffer=None, suffix_count=0, suffix_width=0):
+                 suffix_buffer=None, suffix_count=0, suffix_width=0,
+                 suffix_lengths=None):
     global _worker_searcher
     setting = HostSetting(kernel_source, iteration_bits)
     _worker_searcher = Searcher(
@@ -46,6 +47,7 @@ def _worker_init(kernel_source, iteration_bits, index, chosen_devices,
         suffix_buffer=suffix_buffer,
         suffix_count=suffix_count,
         suffix_width=suffix_width,
+        suffix_lengths=suffix_lengths,
     )
 
 
@@ -78,7 +80,8 @@ def _worker_search(gpu_counts, stop_flag, lock):
 
 def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn,
                        power_pct=100, max_temp=80,
-                       suffix_buffer=None, suffix_count=0, suffix_width=0):
+                       suffix_buffer=None, suffix_count=0, suffix_width=0,
+                       suffix_lengths=None):
     try:
         from core.utils.gpu_temp import get_gpu_temp as _get_temp
 
@@ -91,6 +94,7 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
             suffix_buffer=suffix_buffer,
             suffix_count=suffix_count,
             suffix_width=suffix_width,
+            suffix_lengths=suffix_lengths,
         )
         conn.send({"type": "ready"})
 
@@ -98,6 +102,7 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
         batch_start = time.time()
         batch_keys = 1 << iteration_bits
         last_temp_check = 0.0
+        last_speed_report = time.time()
 
         base_delay = 0.0
         if power_pct < 100:
@@ -161,13 +166,15 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
             if sleep_time > 0:
                 time.sleep(sleep_time)
 
-            if iterations % 16 == 0:
-                elapsed = time.time() - batch_start
+            now2 = time.time()
+            if now2 - last_speed_report >= 2.0:
+                last_speed_report = now2
+                elapsed = now2 - batch_start
                 if elapsed > 0:
                     speed = (iterations * batch_keys) / elapsed
                     conn.send({"type": "speed", "value": speed})
                 iterations = 0
-                batch_start = time.time()
+                batch_start = now2
 
     except Exception as e:
         logging.exception(e)
@@ -188,6 +195,7 @@ def gpu_word_search(
     suffix_buffer=None,
     suffix_count=0,
     suffix_width=0,
+    suffix_lengths=None,
 ):
     try:
         setting = HostSetting(kernel_source, iteration_bits)
@@ -199,6 +207,7 @@ def gpu_word_search(
             suffix_buffer=suffix_buffer,
             suffix_count=suffix_count,
             suffix_width=suffix_width,
+            suffix_lengths=suffix_lengths,
         )
         i = 0
         st = time.time()
@@ -284,7 +293,7 @@ def run_word_miner(
     logging.info(f"Using {gpu_counts} GPU device(s)")
 
     suffix_tuple = tuple(suffix_patterns)
-    suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_tuple)
+    suffix_buf, suffix_cnt, suffix_w, suffix_lens = build_suffix_buffer(suffix_tuple)
     kernel_source = load_kernel_source((), True, suffix_bytes=len(suffix_buf) if suffix_cnt > 0 else 0)
 
     logging.info("GPU kernel compiled with %d suffix patterns", len(suffix_patterns))
@@ -317,6 +326,7 @@ def run_word_miner(
                                 suffix_buf,
                                 suffix_cnt,
                                 suffix_w,
+                                suffix_lens,
                             )
                             for x in range(gpu_counts)
                         ],
@@ -331,7 +341,7 @@ def run_word_miner(
                         word, padding = word_filter.check_address(pubkey)
                         suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
 
-                        save_keypair(pv_bytes, output_dir, word=word)
+                        save_keypair(pv_bytes, output_dir, word=word, pubkey=pubkey)
                         result_count += 1
                         elapsed = time.time() - start_time
 

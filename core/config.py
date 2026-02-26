@@ -2,7 +2,7 @@ import secrets
 from math import ceil
 
 DEFAULT_ITERATION_BITS = 20
-DEFAULT_LOCAL_WORK_SIZE = 32
+DEFAULT_LOCAL_WORK_SIZE = 64
 
 
 class HostSetting:
@@ -24,13 +24,19 @@ class HostSetting:
         return bytearray(token_bytes)
 
     def increase_key32(self) -> None:
-        current_number = int.from_bytes(self.key32, "big")
-        next_number = current_number + (1 << self.iteration_bits)
-        new_key32 = bytearray(next_number.to_bytes(32, "big"))
-        if self.iteration_bytes > 0:
-            carry_index = -int(self.iteration_bytes)
-            if (new_key32[carry_index] < self.key32[carry_index]) and new_key32[
-                carry_index
-            ] != 0:
-                new_key32[carry_index] = 0
-        self.key32[:] = new_key32
+        ib = int(self.iteration_bytes)
+        if ib == 0:
+            return
+        start = 32 - ib
+        increment = (1 << self.iteration_bits)
+        inc_bytes = (self.iteration_bits // 8) + 1
+        loop_start = max(32 - inc_bytes, start - 1)
+        carry = 0
+        for i in range(31, loop_start - 1, -1):
+            shift = (31 - i) * 8
+            add_val = (increment >> shift) & 0xFF
+            val = self.key32[i] + add_val + carry
+            self.key32[i] = val & 0xFF
+            carry = val >> 8
+        if carry and loop_start > 0:
+            self.key32[loop_start - 1] = (self.key32[loop_start - 1] + carry) & 0xFF

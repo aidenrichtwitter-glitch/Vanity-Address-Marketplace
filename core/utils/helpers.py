@@ -18,13 +18,21 @@ def check_character(name: str, character: str) -> None:
         raise e
 
 
-def build_suffix_buffer(ends_with_list: Tuple[str, ...]) -> Tuple[bytearray, int, int]:
+ALPHABET_INDICES = [0] * 128
+for _i, _c in enumerate("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"):
+    ALPHABET_INDICES[ord(_c)] = _i
+
+
+def build_suffix_buffer(ends_with_list: Tuple[str, ...]) -> Tuple[bytearray, int, int, bytearray]:
     if not ends_with_list:
-        return bytearray(1), 0, 0
+        return bytearray(1), 0, 0, bytearray(1)
 
     suffixes = [list(suffix.encode()) for suffix in ends_with_list]
     max_suffix_len = max((len(s) for s in suffixes), default=0)
-    for s in suffixes:
+
+    lengths = bytearray(len(suffixes))
+    for idx, s in enumerate(suffixes):
+        lengths[idx] = len(s)
         s.extend([0] * (max_suffix_len - len(s)))
 
     suffix_count = len(suffixes)
@@ -33,9 +41,9 @@ def build_suffix_buffer(ends_with_list: Tuple[str, ...]) -> Tuple[bytearray, int
     buf = bytearray(suffix_count * suffix_width)
     for i, s in enumerate(suffixes):
         for j, b in enumerate(s):
-            buf[i * suffix_width + j] = b
+            buf[i * suffix_width + j] = ALPHABET_INDICES[b] if b != 0 else 0
 
-    return buf, suffix_count, suffix_width
+    return buf, suffix_count, suffix_width, lengths
 
 
 def load_kernel_source(

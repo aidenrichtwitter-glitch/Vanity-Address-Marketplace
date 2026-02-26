@@ -3740,14 +3740,19 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
                               global uchar *group_offset,
                               __global const uchar * __restrict suffixes,
                               uint suffix_count,
-                              uint suffix_width) {
+                              uint suffix_width,
+                              __global const uchar * __restrict suffix_lengths) {
 #if SUFFIX_BYTES > 0
   __local uchar local_suffixes[SUFFIX_BYTES];
+  __local uchar local_suffix_lengths[SUFFIX_BYTES / 6 + 1];
   {
     uint lid = get_local_id(0);
     uint lsz = get_local_size(0);
     for (uint i = lid; i < SUFFIX_BYTES; i += lsz) {
       local_suffixes[i] = suffixes[i];
+    }
+    for (uint i = lid; i < suffix_count; i += lsz) {
+      local_suffix_lengths[i] = suffix_lengths[i];
     }
     barrier(CLK_LOCAL_MEM_FENCE);
   }
@@ -3763,7 +3768,6 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
   }
   const int global_id = (*group_offset) * get_global_size(0) + get_global_id(0);
 
-  // reset last occupied bytes
   for (size_t i = 0; i < *occupied_bytes; i++) {
     key_base[31 - i] += ((global_id >> (i * 8)) & 0xFF);
   }
@@ -3775,7 +3779,6 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
 
   unsigned int prefix_matched = 0;
 
-  // prefix matching
   #pragma unroll
   for (size_t p = 0; p < N; p++) {
     unsigned int prefix_mismatch = 0;
@@ -3789,28 +3792,25 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
     }
   }
 
-  // suffix matching
   unsigned int suffix_matched = 1;
   if (suffix_width > 0 && suffix_count > 0) {
     suffix_matched = 0;
     for (size_t s = 0; s < suffix_count; s++) {
-      unsigned int suffix_mismatch = 0;
-      size_t suf_len = 0;
-      for (size_t i = 0; i < suffix_width; i++) {
 #if SUFFIX_BYTES > 0
-        if (local_suffixes[s * suffix_width + i] != 0) suf_len = i + 1;
+      size_t suf_len = (size_t)local_suffix_lengths[s];
 #else
-        if (suffixes[s * suffix_width + i] != 0) suf_len = i + 1;
+      size_t suf_len = (size_t)suffix_lengths[s];
 #endif
-      }
+      if (suf_len == 0) continue;
+      unsigned int suffix_mismatch = 0;
       for (size_t i = 0; i < suf_len; i++) {
 #if SUFFIX_BYTES > 0
-        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(alphabet_indices[local_suffixes[s * suffix_width + i]]);
+        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(local_suffixes[s * suffix_width + i]);
 #else
-        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(alphabet_indices[suffixes[s * suffix_width + i]]);
+        suffix_mismatch |= ADJUST_INPUT_CASE(addr_raw[length - suf_len + i]) ^ ADJUST_INPUT_CASE(suffixes[s * suffix_width + i]);
 #endif
       }
-      if (!suffix_mismatch && suf_len > 0) {
+      if (!suffix_mismatch) {
         suffix_matched = 1;
         break;
       }
@@ -3818,7 +3818,6 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
   }
 
   if (prefix_matched && suffix_matched) {
-    // assign to out
     if (out[0] == 0) {
       out[0] = length;
       for (size_t j = 0; j < 32; j++) {

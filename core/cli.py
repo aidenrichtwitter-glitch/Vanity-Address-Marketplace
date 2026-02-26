@@ -138,7 +138,7 @@ def search_pubkey(
     result_count = 0
     with multiprocessing.Manager() as manager:
         with Pool(processes=gpu_counts) as pool:
-            suffix_buf, suffix_cnt, suffix_w = build_suffix_buffer(suffix_patterns)
+            suffix_buf, suffix_cnt, suffix_w, suffix_lens = build_suffix_buffer(suffix_patterns)
             kernel_source = load_kernel_source(
                 prefix_patterns, is_case_sensitive,
                 suffix_bytes=len(suffix_buf) if suffix_cnt > 0 else 0,
@@ -159,6 +159,7 @@ def search_pubkey(
                             suffix_buf,
                             suffix_cnt,
                             suffix_w,
+                            suffix_lens,
                         )
                         for x in range(gpu_counts)
                     ],
