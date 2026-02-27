@@ -4,7 +4,9 @@ PROGRAM_ID = Pubkey.from_string("EHS97x7xVo4svEVrEsVnihXgPLozCFs1BH7Bnkuf2nP6")
 
 PDA_SEED_PREFIX = b"vanity_pkg"
 
-DISCRIMINATOR = bytes([165, 105, 103, 168, 229, 214, 177, 251])
+INSTRUCTION_DISCRIMINATOR = bytes([165, 105, 103, 168, 229, 214, 177, 251])
+
+ACCOUNT_DISCRIMINATOR = bytes([0x18, 0x46, 0x62, 0xBF, 0x3A, 0x90, 0x7B, 0x9E])
 
 RPC_URL = "https://api.devnet.solana.com"
 

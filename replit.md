@@ -36,7 +36,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/utils/helpers.py` - Kernel source loader and Base58 validation
 - `core/utils/gpu_temp.py` - GPU temperature monitoring (pynvml + nvidia-smi fallback); GPU name detection and recommended temp lookup
 - `core/marketplace/` - Blind vanity key marketplace module
-  - `config.py` - On-chain program constants (program ID, PDA seed, discriminator, RPC URL, Lit network)
+  - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
   - `lit_encrypt.py` - Lit Protocol encryption via Lit Actions (TEE) / decryption wrapper; computes and verifies litActionHash
   - `lit_action.js` - JavaScript Lit Action that runs inside Lit's TEE to encrypt private keys; SHA-256 hash stored on-chain for buyer verification

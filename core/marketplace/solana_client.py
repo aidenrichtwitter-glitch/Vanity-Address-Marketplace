@@ -16,7 +16,8 @@ from solana.rpc.types import TxOpts
 from core.marketplace.config import (
     PROGRAM_ID,
     PDA_SEED_PREFIX,
-    DISCRIMINATOR,
+    INSTRUCTION_DISCRIMINATOR,
+    ACCOUNT_DISCRIMINATOR,
     RPC_URL,
     ACCESS_CONTROL_CONDITIONS,
 )
@@ -42,7 +43,7 @@ def build_upload_ix(
     seller: Pubkey,
 ) -> Instruction:
     data = (
-        DISCRIMINATOR
+        INSTRUCTION_DISCRIMINATOR
         + bytes(vanity_pubkey)
         + len(encrypted_json_bytes).to_bytes(4, "little")
         + encrypted_json_bytes
@@ -131,8 +132,12 @@ def fetch_package(pda_str: str, rpc_url: str = RPC_URL) -> Optional[dict]:
 def _parse_package_data(data: bytes) -> Optional[dict]:
     try:
         disc = data[:8]
-        if disc != DISCRIMINATOR:
+        known_disc = disc in (INSTRUCTION_DISCRIMINATOR, ACCOUNT_DISCRIMINATOR)
+
+        if not known_disc:
             json_start = data.find(b'{"ciphertext')
+            if json_start == -1:
+                json_start = data.find(b'{"vanityAddress')
             if json_start == -1:
                 return None
             json_str = data[json_start:].decode("utf-8", errors="ignore")
@@ -158,7 +163,15 @@ def _parse_package_data(data: bytes) -> Optional[dict]:
         if offset + json_len > len(data):
             return None
         json_bytes = data[offset : offset + json_len]
-        encrypted_json = json.loads(json_bytes.decode("utf-8"))
+        try:
+            encrypted_json = json.loads(json_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            encrypted_json = {
+                "ciphertext": b58_mod.b58encode(json_bytes).decode("utf-8"),
+                "vanityAddress": vanity_address,
+                "encryptedInTEE": False,
+                "rawBinary": True,
+            }
 
         return {
             "vanity_address": vanity_address,
