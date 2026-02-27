@@ -56,7 +56,7 @@ def load_kernel_source(
         else [[]]
     )
 
-    max_prefix_len = max((len(p) for p in prefixes), default=0)
+    max_prefix_len = max((len(p) for p in prefixes), default=0) or 1
 
     for p in prefixes:
         p.extend([0] * (max_prefix_len - len(p)))
