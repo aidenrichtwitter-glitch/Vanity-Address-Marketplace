@@ -2,7 +2,7 @@
 """Build standalone executable using PyInstaller.
 
 Run this on the target machine (e.g. Windows with your GPU):
-    pip install pyinstaller pyopencl pynacl base58 click PySide6 solders solana lit-python-sdk
+    pip install pyinstaller pyopencl pynacl base58 click PySide6 solders solana requests
     python build.py
 
 IMPORTANT: Close any running solvanity.exe before building!
@@ -31,7 +31,7 @@ def build():
     sep = ";" if platform.system() == "Windows" else ":"
     add_data_kernel = f"core/opencl/kernel.cl{sep}core/opencl"
     add_data_wordlist = f"wordlist_3000.txt{sep}."
-    add_data_lit_action = f"core/marketplace/lit_action.js{sep}core/marketplace"
+    add_data_lit_action = f"core/marketplace/lit_action.js{sep}core/marketplace"  # kept for hash verification
 
     exe_name = "solvanity.exe" if platform.system() == "Windows" else "solvanity"
     exe_path = os.path.join("dist", exe_name)
@@ -91,7 +91,7 @@ def build():
         "--hidden-import", "solana",
         "--hidden-import", "solana.rpc",
         "--hidden-import", "solana.rpc.api",
-        "--hidden-import", "lit_python_sdk",
+        "--hidden-import", "requests",
         "--hidden-import", "PySide6",
         "--hidden-import", "PySide6.QtWidgets",
         "--hidden-import", "PySide6.QtCore",
@@ -103,7 +103,7 @@ def build():
         "--collect-all", "cffi",
         "--collect-all", "solders",
         "--collect-all", "solana",
-        "--collect-all", "lit_python_sdk",
+        "--collect-all", "requests",
         "--copy-metadata", "PySide6",
         "--copy-metadata", "shiboken6",
     ])

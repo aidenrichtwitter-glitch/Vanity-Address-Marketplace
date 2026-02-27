@@ -10,7 +10,9 @@ ACCOUNT_DISCRIMINATOR = bytes([0x18, 0x46, 0x62, 0xBF, 0x3A, 0x90, 0x7B, 0x9E])
 
 RPC_URL = "https://api.devnet.solana.com"
 
-LIT_NETWORK = "datil"
+LIT_NETWORK = "chipotle-dev"
+
+LIT_API_BASE = "https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.network/core/v1"
 
 SOL_RPC_CONDITIONS = [
     {
