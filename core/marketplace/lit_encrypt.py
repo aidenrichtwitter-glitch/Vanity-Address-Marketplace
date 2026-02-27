@@ -1,12 +1,14 @@
+import base58
 import hashlib
 import json
 import logging
 import os
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
-from core.marketplace.config import ACCESS_CONTROL_CONDITIONS, LIT_NETWORK
+from core.marketplace.config import SOL_RPC_CONDITIONS, LIT_NETWORK
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +20,7 @@ _lit_action_hash = None
 
 def _load_lit_action():
     global _lit_action_code, _lit_action_hash
-    if _lit_action_code is not None:
+    if _lit_action_hash is not None:
         return
 
     candidates = [
@@ -33,17 +35,19 @@ def _load_lit_action():
             logger.info("Loaded Lit Action from %s (hash: %s)", p, _lit_action_hash[:16])
             return
 
-    raise FileNotFoundError("lit_action.js not found alongside lit_encrypt.py")
+    _lit_action_hash = ""
+    _lit_action_code = ""
+    logger.warning("lit_action.js not found — litActionHash will be empty (direct encrypt does not require it)")
 
 
 def get_lit_action_hash() -> str:
     _load_lit_action()
-    return _lit_action_hash
+    return _lit_action_hash or ""
 
 
 def get_lit_action_code() -> str:
     _load_lit_action()
-    return _lit_action_code
+    return _lit_action_code or ""
 
 
 def _get_lit_client():
@@ -58,55 +62,90 @@ def _get_lit_client():
         return _lit_client
 
 
+def _make_auth_sig(kp):
+    from nacl.signing import SigningKey as NaClSigningKey
+    from nacl.encoding import RawEncoder
+
+    pubkey_str = str(kp.pubkey())
+    message = f"I am creating an account to use Lit Protocol at {int(time.time())}"
+    message_bytes = message.encode("utf-8")
+
+    secret_bytes = bytes(kp)
+    if len(secret_bytes) == 64:
+        seed = secret_bytes[:32]
+    else:
+        seed = secret_bytes
+    nacl_sk = NaClSigningKey(seed, encoder=RawEncoder)
+    signed = nacl_sk.sign(message_bytes, encoder=RawEncoder)
+    sig_bytes = signed.signature
+
+    sig_b58 = base58.b58encode(sig_bytes).decode("utf-8")
+
+    return {
+        "sig": sig_b58,
+        "derivedVia": "solana.signMessage",
+        "signedMessage": message,
+        "address": pubkey_str,
+    }
+
+
 def encrypt_private_key(
     privkey_b58: str,
     vanity_address: str,
-    access_conditions: Optional[list] = None,
+    seller_kp=None,
+    sol_rpc_conditions: Optional[list] = None,
 ) -> dict:
-    if access_conditions is None:
-        access_conditions = ACCESS_CONTROL_CONDITIONS
+    if sol_rpc_conditions is None:
+        sol_rpc_conditions = SOL_RPC_CONDITIONS
 
     _load_lit_action()
     lit = _get_lit_client()
 
-    js_params = {
-        "privateKey": privkey_b58,
-        "vanityAddress": vanity_address,
-        "accessControlConditions": access_conditions,
+    auth_sig = None
+    if seller_kp is not None:
+        auth_sig = _make_auth_sig(seller_kp)
+        logger.info("Generated Solana authSig for %s", auth_sig.get("address", ""))
+
+    encrypt_kwargs = {
+        "data_to_encrypt": privkey_b58.encode("utf-8"),
+        "sol_rpc_conditions": sol_rpc_conditions,
+        "chain": "solanaDevnet",
     }
+    if auth_sig:
+        encrypt_kwargs["auth_sig"] = auth_sig
 
     with _lit_lock:
-        result = lit.execute_js(
-            code=_lit_action_code,
-            js_params=js_params,
+        result = lit.encrypt(**encrypt_kwargs)
+
+    if isinstance(result, dict):
+        ciphertext = result.get("ciphertext", "")
+        data_hash = result.get("dataToEncryptHash",
+                    result.get("data_to_encrypt_hash", ""))
+    else:
+        raise RuntimeError(f"Lit encrypt returned unexpected type: {type(result)}")
+
+    if not ciphertext or not data_hash:
+        raise RuntimeError(
+            f"Lit encrypt returned incomplete result: "
+            f"{list(result.keys()) if isinstance(result, dict) else result}"
         )
 
-    response_str = result.get("response", "{}")
-    if isinstance(response_str, str):
-        response = json.loads(response_str)
-    else:
-        response = response_str
-
-    if "error" in response:
-        raise RuntimeError(f"Lit Action error: {response['error']}")
-
-    if "ciphertext" not in response or "dataToEncryptHash" not in response:
-        raise RuntimeError(f"Lit Action returned incomplete response: {list(response.keys())}")
-
     package = {
-        "ciphertext": response["ciphertext"],
-        "dataToEncryptHash": response["dataToEncryptHash"],
+        "ciphertext": ciphertext,
+        "dataToEncryptHash": data_hash,
         "vanityAddress": vanity_address,
-        "accessControlConditions": access_conditions,
-        "litActionHash": _lit_action_hash,
+        "solRpcConditions": sol_rpc_conditions,
         "encryptedInTEE": True,
     }
+    if _lit_action_hash:
+        package["litActionHash"] = _lit_action_hash
 
     return package
 
 
 def decrypt_private_key(
     encrypted_json: dict,
+    buyer_kp=None,
     auth_sig: Optional[dict] = None,
     session_sigs: Optional[dict] = None,
 ) -> str:
@@ -114,14 +153,19 @@ def decrypt_private_key(
 
     ciphertext = encrypted_json["ciphertext"]
     data_hash = encrypted_json["dataToEncryptHash"]
+
     conditions = encrypted_json.get(
-        "accessControlConditions", ACCESS_CONTROL_CONDITIONS
+        "solRpcConditions",
+        encrypted_json.get("accessControlConditions", SOL_RPC_CONDITIONS)
     )
+
+    if auth_sig is None and buyer_kp is not None:
+        auth_sig = _make_auth_sig(buyer_kp)
 
     decrypt_kwargs = {
         "ciphertext": ciphertext,
         "data_to_encrypt_hash": data_hash,
-        "access_control_conditions": conditions,
+        "sol_rpc_conditions": conditions,
         "chain": "solanaDevnet",
     }
     if session_sigs:
@@ -130,18 +174,17 @@ def decrypt_private_key(
         decrypt_kwargs["auth_sig"] = auth_sig
 
     with _lit_lock:
-        result = lit.decrypt_string(**decrypt_kwargs)
+        result = lit.decrypt(**decrypt_kwargs)
 
-    if isinstance(result, dict) and "decryptedString" in result:
-        raw = result["decryptedString"]
-        if isinstance(raw, (bytes, bytearray)):
-            return raw.decode("utf-8")
-        return str(raw)
-    if isinstance(result, dict) and "decryptedData" in result:
-        raw = result["decryptedData"]
-        if isinstance(raw, (bytes, bytearray)):
-            return raw.decode("utf-8")
-        return str(raw)
+    if isinstance(result, dict):
+        for key in ("decryptedString", "decryptedData", "plaintext"):
+            if key in result:
+                raw = result[key]
+                if isinstance(raw, (bytes, bytearray)):
+                    return raw.decode("utf-8")
+                return str(raw)
     if isinstance(result, (bytes, bytearray)):
         return result.decode("utf-8")
+    if isinstance(result, str):
+        return result
     return str(result)

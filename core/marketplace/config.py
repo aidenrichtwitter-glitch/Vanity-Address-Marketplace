@@ -12,12 +12,15 @@ RPC_URL = "https://api.devnet.solana.com"
 
 LIT_NETWORK = "datil"
 
-ACCESS_CONTROL_CONDITIONS = [
+SOL_RPC_CONDITIONS = [
     {
-        "conditionType": "solRpc",
         "method": "getBalance",
         "params": [":userAddress"],
         "chain": "solanaDevnet",
-        "returnValueTest": {"key": "", "comparator": ">=", "value": "1000000"},
+        "returnValueTest": {"key": "", "comparator": ">", "value": "0"},
+        "pdaInterface": {"offset": 0, "fields": {}},
+        "pdaKey": "",
     }
 ]
+
+ACCESS_CONTROL_CONDITIONS = SOL_RPC_CONDITIONS

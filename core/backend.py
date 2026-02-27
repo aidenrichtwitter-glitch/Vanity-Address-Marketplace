@@ -212,7 +212,7 @@ def buy_and_burn(buyer_key, encrypted_json, mint_address, vanity_address,
             log_fn("  Step 6: No plaintext key, attempting Lit decryption...")
             try:
                 from core.marketplace.lit_encrypt import decrypt_private_key
-                privkey = decrypt_private_key(encrypted_json)
+                privkey = decrypt_private_key(encrypted_json, buyer_kp=buyer_kp)
                 log_fn("  Step 6: Lit decryption succeeded")
             except Exception as e:
                 log_fn(f"  Step 6: Lit decryption failed: {e}")
@@ -323,12 +323,13 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
 
         try:
             mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
-            mp_fn("    Connecting to Lit network and executing Lit Action...")
-            encrypted = encrypt_private_key(privkey_b58, pubkey)
-            mp_fn("  Step 4/7: Lit encryption SUCCEEDED")
+            mp_fn("    Connecting to Lit datil network...")
+            encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+            mp_fn("  Step 4/7: Lit encryption SUCCEEDED (direct encrypt, real authSig)")
             mp_fn(f"    encryptedInTEE: True")
             mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
             mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
+            mp_fn(f"    conditions: solRpcConditions (getBalance > 0)")
         except Exception as e:
             log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
             mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
@@ -362,7 +363,7 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 "vanityAddress": pubkey,
                 "ciphertext": encrypted["ciphertext"],
                 "dataToEncryptHash": encrypted["dataToEncryptHash"],
-                "accessControlConditions": encrypted.get("accessControlConditions", []),
+                "solRpcConditions": encrypted.get("solRpcConditions", []),
                 "litActionHash": encrypted.get("litActionHash", ""),
                 "mintAddress": mint_address,
                 "sellerAddress": seller_pubkey,

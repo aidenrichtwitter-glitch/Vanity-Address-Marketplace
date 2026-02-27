@@ -39,8 +39,8 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
-  - `lit_encrypt.py` - Lit Protocol encryption via Lit Actions (TEE) / decryption wrapper; computes and verifies litActionHash
-  - `lit_action.js` - JavaScript Lit Action that runs inside Lit's TEE to encrypt private keys; SHA-256 hash stored on-chain for buyer verification
+  - `lit_encrypt.py` - Lit Protocol direct encryption/decryption using `solRpcConditions` with real Solana authSig; uses datil network; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
+  - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
 ## Mining Modes

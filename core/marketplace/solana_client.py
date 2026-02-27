@@ -19,7 +19,7 @@ from core.marketplace.config import (
     INSTRUCTION_DISCRIMINATOR,
     ACCOUNT_DISCRIMINATOR,
     RPC_URL,
-    ACCESS_CONTROL_CONDITIONS,
+    SOL_RPC_CONDITIONS,
 )
 
 logger = logging.getLogger(__name__)

@@ -5,5 +5,6 @@ from core.marketplace.config import (
     ACCOUNT_DISCRIMINATOR,
     RPC_URL,
     LIT_NETWORK,
+    SOL_RPC_CONDITIONS,
     ACCESS_CONTROL_CONDITIONS,
 )
