@@ -877,12 +877,13 @@ class MainWindow(QMainWindow):
         search_row.addStretch()
         buyer_layout.addLayout(search_row)
 
-        self.packages_table = QTableWidget(0, 4)
-        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "NFT Mint", "Price", "Status"])
+        self.packages_table = QTableWidget(0, 5)
+        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "NFT Mint", "Price", "Status", "Verified"])
         self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
         self.packages_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.packages_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.packages_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.packages_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.packages_table.setAlternatingRowColors(True)
@@ -936,6 +937,12 @@ class MainWindow(QMainWindow):
         root.addWidget(mp_log_box)
 
         self._packages_data = []
+
+        try:
+            from core.marketplace.lit_encrypt import get_lit_action_hash
+            self._known_lit_action_hash = get_lit_action_hash()
+        except Exception:
+            self._known_lit_action_hash = ""
 
         return tab
 
@@ -1141,6 +1148,20 @@ class MainWindow(QMainWindow):
             else:
                 status_item.setForeground(QColor(150, 150, 180))
             self.packages_table.setItem(row, 3, status_item)
+
+            enc_json = pkg.get("encrypted_json", {})
+            pkg_hash = enc_json.get("litActionHash", "")
+            tee_flag = enc_json.get("encryptedInTEE", False)
+            if pkg_hash and tee_flag and pkg_hash == self._known_lit_action_hash:
+                verified_item = QTableWidgetItem("TEE Verified")
+                verified_item.setForeground(QColor(100, 230, 120))
+            elif pkg_hash and tee_flag:
+                verified_item = QTableWidgetItem("Unknown Code")
+                verified_item.setForeground(QColor(255, 200, 50))
+            else:
+                verified_item = QTableWidgetItem("Unverified")
+                verified_item.setForeground(QColor(255, 80, 80))
+            self.packages_table.setItem(row, 4, verified_item)
 
     def _on_browse_error(self, err):
         self.browse_packages_btn.setEnabled(True)

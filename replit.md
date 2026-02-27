@@ -35,7 +35,8 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, discriminator, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
-  - `lit_encrypt.py` - Lit Protocol encryption/decryption wrapper for private keys
+  - `lit_encrypt.py` - Lit Protocol encryption via Lit Actions (TEE) / decryption wrapper; computes and verifies litActionHash
+  - `lit_action.js` - JavaScript Lit Action that runs inside Lit's TEE to encrypt private keys; SHA-256 hash stored on-chain for buyer verification
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
 ## Mining Modes
@@ -47,9 +48,10 @@ The Word Miner tab has a mode toggle:
 - Standard behavior for personal vanity address mining
 
 ### Blind Mode
-- Found vanity keys are encrypted with Lit Protocol (datil network) and uploaded to a Solana devnet PDA
+- Found vanity keys are encrypted inside Lit Protocol's TEE via a Lit Action (datil network) and uploaded to a Solana devnet PDA
+- Encryption happens inside Lit's Trusted Execution Environment, not on the seller's machine — the Lit Action code is auditable and its SHA-256 hash is stored on-chain with each package
 - An NFT (SPL token, supply=1) is minted alongside each upload to enable burn-to-decrypt
-- The encrypted JSON includes mintAddress and sellerAddress fields
+- The encrypted JSON includes mintAddress, sellerAddress, litActionHash, and encryptedInTEE fields
 - The private key is NEVER saved locally or shown to the user
 - Requires a seller wallet (base58 private key) configured in the inline wallet input
 - Only buyers who burn the NFT can decrypt the key
@@ -65,7 +67,7 @@ The Marketplace tab enables an NFT-based vanity key marketplace:
 ### Buyer Flow
 1. Enter buyer wallet (private key) in the Buyer Wallet section
 2. Click "Search Packages" to fetch all uploaded PDAs from devnet
-3. Packages show: vanity address, NFT mint, price, status (ACTIVE/BURNED)
+3. Packages show: vanity address, NFT mint, price, status (ACTIVE/BURNED), verification (TEE Verified/Unknown Code/Unverified)
 4. Select an ACTIVE package and click "Burn & Decrypt"
 5. The app: transfers NFT to buyer → burns NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/` folder
 6. Burned packages show as "SOLD" and cannot be re-purchased
