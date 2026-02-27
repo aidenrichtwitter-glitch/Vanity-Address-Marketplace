@@ -6,6 +6,24 @@ import time
 import threading
 from pathlib import Path
 
+def _load_dotenv():
+    env_path = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / ".env"
+    if not env_path.exists():
+        env_path = Path(__file__).resolve().parent / ".env"
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" in line:
+                key, _, val = line.partition("=")
+                key = key.strip()
+                val = val.strip().strip('"').strip("'")
+                if key and key not in os.environ:
+                    os.environ[key] = val
+
+_load_dotenv()
+
 os.environ.setdefault("PYOPENCL_CTX", "0:0")
 if sys.platform != "win32":
     os.environ.setdefault("DISPLAY", ":0")
@@ -348,6 +366,74 @@ class MiningThread(threading.Thread):
         self.signals.stopped.emit()
 
 
+class CpuMiningThread(threading.Thread):
+    def __init__(self, signals, word_filter, output_dir, count=0, mining_mode="mine"):
+        super().__init__(daemon=True)
+        self.signals = signals
+        self.word_filter = word_filter
+        self.output_dir = output_dir
+        self.count = count
+        self.mining_mode = mining_mode
+        self._stop_event = threading.Event()
+
+    def stop(self):
+        self._stop_event.set()
+
+    def run(self):
+        try:
+            import secrets
+            from nacl.signing import SigningKey
+            from base58 import b58encode
+
+            self.signals.log.emit("CPU mining mode — no GPU required")
+            self.signals.status.emit("Mining (CPU)...")
+
+            Path(self.output_dir).mkdir(parents=True, exist_ok=True)
+
+            result_count = 0
+            start_time = time.time()
+            keys_checked = 0
+            last_speed_report = time.time()
+
+            while not self._stop_event.is_set():
+                if 0 < self.count <= result_count:
+                    break
+
+                seed = secrets.token_bytes(32)
+                sk = SigningKey(seed)
+                pk_bytes = bytes(sk.verify_key)
+                pubkey = b58encode(pk_bytes).decode()
+                keys_checked += 1
+
+                word, padding = self.word_filter.check_address(pubkey)
+
+                if word:
+                    pv_bytes = bytes(sk)
+                    suffix_display = (padding + word) if padding else word
+                    if self.mining_mode != "blind":
+                        save_keypair(pv_bytes, self.output_dir, word=word, pubkey=pubkey)
+                    result_count += 1
+                    elapsed = time.time() - start_time
+                    self.signals.found.emit(pubkey, suffix_display, f"{elapsed:.1f}s", result_count)
+                    self.signals.found_with_key.emit(pubkey, pv_bytes, suffix_display)
+                    self.signals.log.emit(f"[FOUND] #{result_count}: {pubkey} -> {suffix_display}")
+
+                now = time.time()
+                if now - last_speed_report >= 2.0:
+                    elapsed_since = now - last_speed_report
+                    speed = keys_checked / elapsed_since if elapsed_since > 0 else 0
+                    self.signals.speed.emit(speed)
+                    keys_checked = 0
+                    last_speed_report = now
+
+            self.signals.status.emit(f"Complete - {result_count} found")
+
+        except Exception as e:
+            self.signals.error.emit(str(e))
+
+        self.signals.stopped.emit()
+
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -572,12 +658,6 @@ class MainWindow(QMainWindow):
         clear_wl_btn.setFixedWidth(50)
         clear_wl_btn.clicked.connect(lambda: (self.wordlist_edit.clear(), self._load_word_count()))
         wl_row.addWidget(clear_wl_btn)
-        convert_btn = QPushButton("l → 1")
-        convert_btn.setObjectName("browseBtn")
-        convert_btn.setFixedWidth(50)
-        convert_btn.setToolTip("Create a copy of the loaded wordlist with all 'l' replaced by '1'")
-        convert_btn.clicked.connect(self._convert_wordlist_l_to_1)
-        wl_row.addWidget(convert_btn)
         wl_col.addLayout(wl_row)
         row2.addLayout(wl_col)
 
@@ -586,11 +666,58 @@ class MainWindow(QMainWindow):
         row3 = QHBoxLayout()
         row3.setSpacing(20)
 
+        compute_col = QVBoxLayout()
+        compute_col.setSpacing(4)
+        compute_lbl = QLabel("Compute")
+        compute_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        compute_col.addWidget(compute_lbl)
+        compute_row = QHBoxLayout()
+        compute_row.setSpacing(4)
+        self._compute_mode = "cpu"
+        self.cpu_mode_btn = QPushButton("CPU")
+        self.cpu_mode_btn.setCheckable(True)
+        self.cpu_mode_btn.setChecked(True)
+        self.cpu_mode_btn.setFixedWidth(60)
+        self.cpu_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a6e2a; border: 2px solid #50e050;
+                border-radius: 4px; color: #e0ffe0; font-weight: bold;
+                font-size: 12px; padding: 4px 12px;
+            }
+            QPushButton:!checked {
+                background-color: #2a2a4a; border: 1px solid #4a4a6e;
+                color: #8888aa;
+            }
+            QPushButton:!checked:hover { background-color: #333360; }
+        """)
+        self.cpu_mode_btn.clicked.connect(lambda: self._set_compute_mode("cpu"))
+        compute_row.addWidget(self.cpu_mode_btn)
+        self.gpu_mode_btn = QPushButton("GPU")
+        self.gpu_mode_btn.setCheckable(True)
+        self.gpu_mode_btn.setChecked(False)
+        self.gpu_mode_btn.setFixedWidth(60)
+        self.gpu_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2a4a; border: 1px solid #4a4a6e;
+                border-radius: 4px; color: #8888aa; font-weight: bold;
+                font-size: 12px; padding: 4px 12px;
+            }
+            QPushButton:checked {
+                background-color: #2a6e2a; border: 2px solid #50e050;
+                color: #e0ffe0;
+            }
+            QPushButton:!checked:hover { background-color: #333360; }
+        """)
+        self.gpu_mode_btn.clicked.connect(lambda: self._set_compute_mode("gpu"))
+        compute_row.addWidget(self.gpu_mode_btn)
+        compute_col.addLayout(compute_row)
+        row3.addLayout(compute_col)
+
         pwr_col = QVBoxLayout()
         pwr_col.setSpacing(4)
-        pwr_lbl = QLabel("GPU Power")
-        pwr_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
-        pwr_col.addWidget(pwr_lbl)
+        self.gpu_power_label = QLabel("GPU Power")
+        self.gpu_power_label.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        pwr_col.addWidget(self.gpu_power_label)
         pwr_row = QHBoxLayout()
         pwr_row.setSpacing(8)
         self.power_slider = QSlider(Qt.Horizontal)
@@ -605,13 +732,17 @@ class MainWindow(QMainWindow):
         pwr_row.addWidget(self.power_slider)
         pwr_row.addWidget(self.power_label)
         pwr_col.addLayout(pwr_row)
-        row3.addLayout(pwr_col)
+        self.gpu_power_widget = QWidget()
+        gpu_power_inner = QVBoxLayout(self.gpu_power_widget)
+        gpu_power_inner.setContentsMargins(0, 0, 0, 0)
+        gpu_power_inner.addLayout(pwr_col)
+        row3.addWidget(self.gpu_power_widget)
 
         temp_col = QVBoxLayout()
         temp_col.setSpacing(4)
-        temp_lbl = QLabel("Max GPU Temp (°C)")
-        temp_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
-        temp_col.addWidget(temp_lbl)
+        self.gpu_temp_label_title = QLabel("Max GPU Temp")
+        self.gpu_temp_label_title.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        temp_col.addWidget(self.gpu_temp_label_title)
         self.max_temp_spin = QSpinBox()
         self.max_temp_spin.setRange(60, 95)
         self._detected_gpu_name = None
@@ -619,20 +750,28 @@ class MainWindow(QMainWindow):
         self.max_temp_spin.setValue(80)
         self.max_temp_spin.setSuffix("°C")
         temp_col.addWidget(self.max_temp_spin)
-        row3.addLayout(temp_col)
+        self.gpu_temp_widget = QWidget()
+        gpu_temp_inner = QVBoxLayout(self.gpu_temp_widget)
+        gpu_temp_inner.setContentsMargins(0, 0, 0, 0)
+        gpu_temp_inner.addLayout(temp_col)
+        row3.addWidget(self.gpu_temp_widget)
 
         gpu_info_col = QVBoxLayout()
         gpu_info_col.setSpacing(4)
         gpu_info_title = QLabel("Detected GPU")
         gpu_info_title.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
         gpu_info_col.addWidget(gpu_info_title)
-        self.gpu_name_label = QLabel("Detecting...")
+        self.gpu_name_label = QLabel("Not detected")
         self.gpu_name_label.setStyleSheet(
             "font-size: 11px; font-weight: bold; color: #6ea8fe; background: transparent; padding: 4px 0;"
         )
         self.gpu_name_label.setWordWrap(True)
         gpu_info_col.addWidget(self.gpu_name_label)
-        row3.addLayout(gpu_info_col)
+        self.gpu_info_widget = QWidget()
+        gpu_info_inner = QVBoxLayout(self.gpu_info_widget)
+        gpu_info_inner.setContentsMargins(0, 0, 0, 0)
+        gpu_info_inner.addLayout(gpu_info_col)
+        row3.addWidget(self.gpu_info_widget)
 
         sg.addLayout(row3)
 
@@ -764,6 +903,10 @@ class MainWindow(QMainWindow):
         root.addWidget(mode_frame)
 
         self._mining_mode = "mine"
+
+        self.gpu_power_widget.setVisible(False)
+        self.gpu_temp_widget.setVisible(False)
+        self.gpu_info_widget.setVisible(False)
 
         status_row = QHBoxLayout()
         status_row.setSpacing(12)
@@ -1144,6 +1287,15 @@ class MainWindow(QMainWindow):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
         return tab
+
+    def _set_compute_mode(self, mode):
+        self._compute_mode = mode
+        self.cpu_mode_btn.setChecked(mode == "cpu")
+        self.gpu_mode_btn.setChecked(mode == "gpu")
+        gpu_visible = (mode == "gpu")
+        self.gpu_power_widget.setVisible(gpu_visible)
+        self.gpu_temp_widget.setVisible(gpu_visible)
+        self.gpu_info_widget.setVisible(gpu_visible)
 
     def _set_mining_mode(self, mode):
         self._mining_mode = mode
@@ -1937,8 +2089,11 @@ class MainWindow(QMainWindow):
         power_pct = self.power_slider.value()
         max_temp = self.max_temp_spin.value()
 
-        gpu_info = self._detected_gpu_name or "Unknown"
-        self._on_log(f"GPU: {gpu_info}  |  Power: {power_pct}%  |  Max Temp: {max_temp}°C (recommended: {self._recommended_temp}°C)")
+        if self._compute_mode == "gpu":
+            gpu_info = self._detected_gpu_name or "Unknown"
+            self._on_log(f"Compute: GPU  |  Power: {power_pct}%  |  Max Temp: {max_temp}°C (recommended: {self._recommended_temp}°C)")
+        else:
+            self._on_log("Compute: CPU (pure Python)")
 
         self._total_keys = 0
         self._last_speed_raw = 0.0
@@ -1949,17 +2104,26 @@ class MainWindow(QMainWindow):
             count_limit = len(word_filter.words)
             self._on_log(f"[Blind] Will stop after finding {count_limit} addresses (one per word)")
 
-        self.mining_thread = MiningThread(
-            signals=self.signals,
-            word_filter=word_filter,
-            suffix_patterns=suffix_patterns,
-            output_dir=output_dir,
-            count=count_limit,
-            iteration_bits=DEFAULT_ITERATION_BITS,
-            power_pct=power_pct,
-            max_temp=max_temp,
-            mining_mode=self._mining_mode,
-        )
+        if self._compute_mode == "gpu":
+            self.mining_thread = MiningThread(
+                signals=self.signals,
+                word_filter=word_filter,
+                suffix_patterns=suffix_patterns,
+                output_dir=output_dir,
+                count=count_limit,
+                iteration_bits=DEFAULT_ITERATION_BITS,
+                power_pct=power_pct,
+                max_temp=max_temp,
+                mining_mode=self._mining_mode,
+            )
+        else:
+            self.mining_thread = CpuMiningThread(
+                signals=self.signals,
+                word_filter=word_filter,
+                output_dir=output_dir,
+                count=count_limit,
+                mining_mode=self._mining_mode,
+            )
 
         self._blind_wallet_snapshot = self.seller_wallet_edit.text().strip() if self._mining_mode == "blind" else ""
         self._blind_price_sol = 0
@@ -2081,6 +2245,8 @@ class MainWindow(QMainWindow):
         self.max_temp_spin.setEnabled(enabled)
         self.mine_mode_btn.setEnabled(enabled)
         self.blind_mode_btn.setEnabled(enabled)
+        self.cpu_mode_btn.setEnabled(enabled)
+        self.gpu_mode_btn.setEnabled(enabled)
 
     def _on_found(self, address, suffix, elapsed, count):
         row = self.results_table.rowCount()
