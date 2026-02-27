@@ -62,28 +62,8 @@ def build():
 
     if plugins_dir and pyside6_dir:
         cmd.extend(["--add-data", f"{plugins_dir}{sep}PySide6/plugins"])
-
-        for dll_name in [
-            "Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Network.dll",
-            "Qt6Core.pyd", "Qt6Gui.pyd", "Qt6Widgets.pyd", "Qt6Network.pyd",
-        ]:
-            dll_path = os.path.join(pyside6_dir, dll_name)
-            if os.path.exists(dll_path):
-                cmd.extend(["--add-binary", f"{dll_path}{sep}PySide6"])
-
-        for so_name in [
-            "QtCore.abi3.so", "QtGui.abi3.so", "QtWidgets.abi3.so", "QtNetwork.abi3.so",
-            "libQt6Core.so.6", "libQt6Gui.so.6", "libQt6Widgets.so.6", "libQt6Network.so.6",
-        ]:
-            so_path = os.path.join(pyside6_dir, so_name)
-            if os.path.exists(so_path):
-                cmd.extend(["--add-binary", f"{so_path}{sep}PySide6"])
-
-        shiboken_pyd = os.path.join(pyside6_dir, "..", "shiboken6", "shiboken6.abi3.so")
-        if not os.path.exists(shiboken_pyd):
-            shiboken_pyd = os.path.join(pyside6_dir, "..", "shiboken6", "shiboken6.pyd")
-        if os.path.exists(shiboken_pyd):
-            cmd.extend(["--add-binary", f"{shiboken_pyd}{sep}shiboken6"])
+        cmd.extend(["--collect-binaries", "PySide6"])
+        cmd.extend(["--collect-binaries", "shiboken6"])
 
     cmd.extend([
         "--hidden-import", "cffi",
