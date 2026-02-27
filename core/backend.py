@@ -508,9 +508,11 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
         try:
             mp_fn("  Step 5/7: Minting NFT on devnet...")
             mp_fn(f"    Seller: {seller_pubkey}")
-            mint_address = mint_nft(seller_kp)
-            log_fn(f"NFT minted: {mint_address}")
+            mint_address, mint_cost_lamports = mint_nft(seller_kp)
+            mint_cost_sol = mint_cost_lamports / 1e9
+            log_fn(f"NFT minted: {mint_address} (cost: {mint_cost_sol:.6f} SOL)")
             mp_fn(f"  Step 5/7: NFT minted OK: {mint_address}")
+            mp_fn(f"    Mint cost: {mint_cost_sol:.6f} SOL ({mint_cost_lamports} lamports)")
             mp_fn(f"    Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
         except Exception as e:
             log_fn(f"MINT FAILED: {e}")

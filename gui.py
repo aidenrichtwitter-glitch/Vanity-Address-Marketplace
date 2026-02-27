@@ -1114,6 +1114,7 @@ class MainWindow(QMainWindow):
 
         self.owned_table = QTableWidget(0, 5)
         self.owned_table.setHorizontalHeaderLabels(["Word", "Suffix", "NFT", "Price", "Actions"])
+        self.owned_table.cellClicked.connect(self._on_table_cell_clicked)
         self.owned_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.owned_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.owned_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -1175,6 +1176,7 @@ class MainWindow(QMainWindow):
 
         self.packages_table = QTableWidget(0, 6)
         self.packages_table.setHorizontalHeaderLabels(["Word", "Suffix", "NFT", "Price", "Status", "Verified"])
+        self.packages_table.cellClicked.connect(self._on_table_cell_clicked)
         self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
@@ -1604,6 +1606,21 @@ class MainWindow(QMainWindow):
             pass
         return "Free"
 
+    def _on_table_cell_clicked(self, row, col):
+        if col != 2:
+            return
+        sender = self.sender()
+        if not sender:
+            return
+        item = sender.item(row, col)
+        if not item:
+            return
+        mint_addr = item.data(Qt.UserRole)
+        if mint_addr:
+            import webbrowser
+            url = f"https://explorer.solana.com/address/{mint_addr}?cluster=devnet"
+            webbrowser.open(url)
+
     def _toggle_buyer_wallet_vis(self):
         if self.buyer_wallet_edit.echoMode() == QLineEdit.Password:
             self.buyer_wallet_edit.setEchoMode(QLineEdit.Normal)
@@ -1717,8 +1734,12 @@ class MainWindow(QMainWindow):
             mint_addr = enc_json.get("mintAddress", "")
             mint_display = f"{mint_addr[:8]}..." if len(mint_addr) > 8 else (mint_addr or "—")
             mint_item = QTableWidgetItem(mint_display)
-            mint_item.setToolTip(mint_addr)
-            mint_item.setForeground(QColor(160, 170, 240))
+            mint_item.setToolTip(f"Click to view on Solana Explorer: {mint_addr}")
+            mint_item.setForeground(QColor(100, 160, 255))
+            mint_item.setData(Qt.UserRole, mint_addr)
+            font = mint_item.font()
+            font.setUnderline(True)
+            mint_item.setFont(font)
             self.packages_table.setItem(row, 2, mint_item)
 
             price = self._get_package_price(pkg)
@@ -1962,7 +1983,12 @@ class MainWindow(QMainWindow):
             mint = enc_json.get("mintAddress", "")
             mint_display = f"{mint[:8]}..." if len(mint) > 8 else (mint or "—")
             mint_item = QTableWidgetItem(mint_display)
-            mint_item.setToolTip(mint)
+            mint_item.setToolTip(f"Click to view on Solana Explorer: {mint}")
+            mint_item.setForeground(QColor(100, 160, 255))
+            mint_item.setData(Qt.UserRole, mint)
+            font = mint_item.font()
+            font.setUnderline(True)
+            mint_item.setFont(font)
             self.owned_table.setItem(row, 2, mint_item)
 
             price = self._get_package_price(pkg)

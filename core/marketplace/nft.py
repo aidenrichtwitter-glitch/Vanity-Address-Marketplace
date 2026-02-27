@@ -128,8 +128,11 @@ def mint_nft(seller_kp: Keypair, rpc_url: str = RPC_URL) -> str:
     )
 
     mint_addr = str(mint_kp.pubkey())
-    logger.info("[mint_nft] SUCCESS: Minted NFT %s (sig: %s)", mint_addr, sig_resp.value)
-    return mint_addr
+    tx_fee = 5000
+    total_cost_lamports = mint_rent + tx_fee
+    logger.info("[mint_nft] SUCCESS: Minted NFT %s (sig: %s) cost: %d lamports (%.6f SOL)",
+                mint_addr, sig_resp.value, total_cost_lamports, total_cost_lamports / 1e9)
+    return mint_addr, total_cost_lamports
 
 
 def transfer_nft(
