@@ -149,7 +149,7 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 - **pyinstaller** - Build standalone executable
 - **solders** - Solana keypair/pubkey/instruction types
 - **solana** - Solana RPC client (solana-py)
-- **lit-python-sdk** - Lit Protocol encryption/decryption
+- **lit-python-sdk** - Lit Protocol encryption/decryption (currently unused — Lit unreachable from Replit/Windows)
 
 ## Building
 ```bash

@@ -180,6 +180,18 @@ class MiningSignals(QObject):
     gpu_detected = Signal(str, int)
 
 
+class ThreadBridgeSignals(QObject):
+    log_signal = Signal(str)
+    mp_log_signal = Signal(str)
+    burn_status_signal = Signal(str)
+    burn_success_signal = Signal(str, str, str)
+    burn_error_signal = Signal(str)
+    upload_success_signal = Signal(dict, str)
+    upload_error_signal = Signal(str, str)
+    populate_packages_signal = Signal(list, str)
+    browse_error_signal = Signal(str)
+
+
 class MiningThread(threading.Thread):
     def __init__(self, signals, word_filter, suffix_patterns, output_dir,
                  count, iteration_bits, power_pct=100, max_temp=80,
@@ -326,6 +338,16 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(880, 620)
         self.resize(920, 680)
         self.mining_thread = None
+        self._thread_bridge = ThreadBridgeSignals()
+        self._thread_bridge.log_signal.connect(self._on_log)
+        self._thread_bridge.mp_log_signal.connect(self._mp_log)
+        self._thread_bridge.burn_status_signal.connect(self._on_burn_status)
+        self._thread_bridge.burn_success_signal.connect(self._on_burn_success)
+        self._thread_bridge.burn_error_signal.connect(self._on_burn_error)
+        self._thread_bridge.upload_success_signal.connect(self._on_upload_success)
+        self._thread_bridge.upload_error_signal.connect(self._on_upload_error)
+        self._thread_bridge.populate_packages_signal.connect(self._populate_packages)
+        self._thread_bridge.browse_error_signal.connect(self._on_browse_error)
         self._build_ui()
         self._load_word_count()
 
@@ -1110,9 +1132,9 @@ class MainWindow(QMainWindow):
                     else:
                         pkg["nft_status"] = "no NFT"
 
-                QTimer.singleShot(0, lambda: self._populate_packages(packages, search_filter))
+                self._thread_bridge.populate_packages_signal.emit(packages, search_filter)
             except Exception as e:
-                QTimer.singleShot(0, lambda: self._on_browse_error(str(e)))
+                self._thread_bridge.browse_error_signal.emit(str(e))
 
         t = threading.Thread(target=_fetch, daemon=True)
         t.start()
@@ -1252,10 +1274,12 @@ class MainWindow(QMainWindow):
             import traceback as _tb
 
             def _status(msg):
-                QTimer.singleShot(0, lambda m=msg: self._on_burn_status(m))
+                print(f"[BurnStatus] {msg}", flush=True)
+                self._thread_bridge.burn_status_signal.emit(msg)
 
             def _mp(msg):
-                QTimer.singleShot(0, lambda m=msg: self._mp_log(m))
+                print(f"[MP] {msg}", flush=True)
+                self._thread_bridge.mp_log_signal.emit(msg)
 
             try:
                 _mp("  Step 1: Importing modules...")
@@ -1265,7 +1289,7 @@ class MainWindow(QMainWindow):
             except Exception as e:
                 _mp(f"  FATAL: Import failed: {e}")
                 _mp(f"  Traceback: {_tb.format_exc()}")
-                QTimer.singleShot(0, lambda: self._on_burn_error(f"Import failed: {e}"))
+                self._thread_bridge.burn_error_signal.emit(f"Import failed: {e}")
                 return
 
             try:
@@ -1274,7 +1298,7 @@ class MainWindow(QMainWindow):
                 _mp(f"  Step 2: Supply = {supply}")
                 if supply == 0:
                     _mp("  ABORT: NFT already burned")
-                    QTimer.singleShot(0, lambda: self._on_burn_error("NFT already burned — this key was already sold"))
+                    self._thread_bridge.burn_error_signal.emit("NFT already burned — this key was already sold")
                     return
 
                 _mp("  Step 3: Loading buyer keypair...")
@@ -1295,7 +1319,7 @@ class MainWindow(QMainWindow):
                     _mp(f"  Step 4: Buyer balance = {buyer_balance} lamports ({buyer_balance / 1e9:.4f} SOL)")
                     if buyer_balance < price_lamports + 10_000:
                         _mp(f"  ABORT: Insufficient funds")
-                        QTimer.singleShot(0, lambda: self._on_burn_error(f"Insufficient SOL. Need {price_lamports / 1e9:.4f} + fees, have {buyer_balance / 1e9:.4f}"))
+                        self._thread_bridge.burn_error_signal.emit(f"Insufficient SOL. Need {price_lamports / 1e9:.4f} + fees, have {buyer_balance / 1e9:.4f}")
                         return
                     seller_pubkey = SoldersPubkey.from_string(seller_addr)
                     _mp(f"  Step 4: Transferring {price_lamports} lamports to {seller_addr}...")
@@ -1325,11 +1349,11 @@ class MainWindow(QMainWindow):
                             _mp("  Step 5: NFT transferred to buyer")
                         else:
                             _mp("  ABORT: Buyer doesn't own NFT and no seller key available")
-                            QTimer.singleShot(0, lambda: self._on_burn_error("You don't own this NFT. Transfer it to your wallet first."))
+                            self._thread_bridge.burn_error_signal.emit("You don't own this NFT. Transfer it to your wallet first.")
                             return
                     else:
                         _mp("  ABORT: Buyer doesn't own NFT and no seller address in package")
-                        QTimer.singleShot(0, lambda: self._on_burn_error("You don't own this NFT and no seller info available."))
+                        self._thread_bridge.burn_error_signal.emit("You don't own this NFT and no seller info available.")
                         return
 
                 _status("Burning NFT on-chain...")
@@ -1373,12 +1397,12 @@ class MainWindow(QMainWindow):
                     _mp(f"  Payment sig: {payment_sig}")
                 _mp(f"  Key file: {out_file}")
 
-                QTimer.singleShot(0, lambda: self._on_burn_success(str(out_file), vanity, burn_sig))
+                self._thread_bridge.burn_success_signal.emit(str(out_file), vanity, burn_sig)
             except Exception as e:
                 _mp(f"=== BUY & BURN FAILED ===")
                 _mp(f"  Error: {e}")
                 _mp(f"  Traceback: {_tb.format_exc()}")
-                QTimer.singleShot(0, lambda: self._on_burn_error(str(e)))
+                self._thread_bridge.burn_error_signal.emit(str(e))
 
         t = threading.Thread(target=_do_burn_and_decrypt, daemon=True)
         t.start()
@@ -1436,10 +1460,12 @@ class MainWindow(QMainWindow):
             import traceback as _tb
 
             def _log(msg):
-                QTimer.singleShot(0, lambda m=msg: self._on_log(f"[Blind] {m}"))
+                print(f"[Blind] {msg}", flush=True)
+                self._thread_bridge.log_signal.emit(f"[Blind] {msg}")
 
             def _mp(msg):
-                QTimer.singleShot(0, lambda m=msg: self._mp_log(m))
+                print(f"[MP] {msg}", flush=True)
+                self._thread_bridge.mp_log_signal.emit(msg)
 
             try:
                 _mp(f"  Step 1/6: Importing modules...")
@@ -1549,14 +1575,14 @@ class MainWindow(QMainWindow):
                 _mp(f"  NFT Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
                 _mp(f"========================")
 
-                QTimer.singleShot(0, lambda: self._on_upload_success(result, pubkey))
+                self._thread_bridge.upload_success_signal.emit(result, pubkey)
             except Exception as e:
                 _log(f"UPLOAD TX FAILED: {e}")
                 _mp(f"  FATAL: Upload transaction failed: {e}")
                 _mp(f"  NFT was minted ({mint_address}) but package was NOT uploaded")
                 _mp(f"  The NFT exists on-chain but has no associated package data")
                 _mp(f"  Traceback: {_tb.format_exc()}")
-                QTimer.singleShot(0, lambda: self._on_upload_error(str(e), pubkey))
+                self._thread_bridge.upload_error_signal.emit(str(e), pubkey)
 
         t = threading.Thread(target=_upload, daemon=True)
         t.start()

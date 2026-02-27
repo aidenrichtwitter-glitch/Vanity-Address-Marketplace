@@ -496,9 +496,15 @@ function esc(s) {
 }
 
 function searchPackages() {
+    console.log('[searchPackages] called');
     const btn = document.getElementById('searchBtn');
     const status = document.getElementById('packagesStatus');
-    const filter = document.getElementById('searchFilter').value.trim();
+    const filterEl = document.getElementById('searchFilter');
+    if (!btn || !status || !filterEl) {
+        console.error('[searchPackages] Missing DOM elements:', {btn: !!btn, status: !!status, filterEl: !!filterEl});
+        return;
+    }
+    const filter = filterEl.value.trim();
 
     btn.disabled = true;
     status.textContent = 'Searching devnet for packages + checking NFT status...';
@@ -508,9 +514,13 @@ function searchPackages() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({filter: filter})
     })
-    .then(r => r.json())
+    .then(r => {
+        console.log('[searchPackages] Response status:', r.status);
+        return r.json();
+    })
     .then(d => {
         btn.disabled = false;
+        console.log('[searchPackages] Data:', d);
         if (d.error) {
             status.textContent = 'Search error: ' + d.error.substring(0, 60);
             appendLog('mpLog', 'Search error: ' + d.error);
@@ -553,8 +563,9 @@ function searchPackages() {
         });
     })
     .catch(e => {
+        console.error('[searchPackages] Fetch error:', e);
         btn.disabled = false;
-        status.textContent = 'Search failed';
+        status.textContent = 'Search failed: ' + (e.message || e);
         appendLog('mpLog', 'Search error: ' + e);
     });
 }
@@ -636,8 +647,8 @@ function buyAndBurn() {
         packagesData[selectedPackageIdx].nft_status = 'BURNED';
         const rows = document.querySelectorAll('#packagesTable tr');
         if (rows[selectedPackageIdx]) {
-            rows[selectedPackageIdx].children[3].className = 'status-burned';
-            rows[selectedPackageIdx].children[3].textContent = 'BURNED';
+            rows[selectedPackageIdx].children[4].className = 'status-burned';
+            rows[selectedPackageIdx].children[4].textContent = 'BURNED';
         }
         buyBtn.textContent = 'SOLD - already burned';
         buyBtn.disabled = true;
