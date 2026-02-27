@@ -181,7 +181,8 @@ class MiningSignals(QObject):
 
 class MiningThread(threading.Thread):
     def __init__(self, signals, word_filter, suffix_patterns, output_dir,
-                 count, iteration_bits, power_pct=100, max_temp=80):
+                 count, iteration_bits, power_pct=100, max_temp=80,
+                 mining_mode="mine"):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
@@ -191,6 +192,7 @@ class MiningThread(threading.Thread):
         self.iteration_bits = iteration_bits
         self.power_pct = power_pct
         self.max_temp = max_temp
+        self.mining_mode = mining_mode
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -277,7 +279,8 @@ class MiningThread(threading.Thread):
                             pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
                             suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
-                            save_keypair(pv_bytes, self.output_dir, word=word, pubkey=pubkey)
+                            if self.mining_mode != "blind":
+                                save_keypair(pv_bytes, self.output_dir, word=word, pubkey=pubkey)
                             result_count += 1
                             elapsed = time.time() - start_time
                             self.signals.found.emit(
@@ -416,7 +419,7 @@ class MainWindow(QMainWindow):
         self.temp_timer.timeout.connect(self._apply_temp_display)
         self.temp_timer.start(2000)
 
-        self._marketplace_auto_upload = False
+        self._mining_mode = "mine"
 
     def _build_mining_tab(self):
         tab = QWidget()
@@ -588,6 +591,115 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self.settings_content)
 
+        mode_frame = QFrame()
+        mode_frame.setStyleSheet("""
+            QFrame {
+                background-color: #222244;
+                border: 1px solid #3a3a5c;
+                border-radius: 6px;
+                padding: 8px;
+            }
+        """)
+        mode_layout = QVBoxLayout(mode_frame)
+        mode_layout.setSpacing(6)
+        mode_layout.setContentsMargins(10, 8, 10, 8)
+
+        mode_header = QHBoxLayout()
+        mode_header.setSpacing(12)
+
+        mode_title = QLabel("Mining Mode:")
+        mode_title.setStyleSheet("font-size: 12px; font-weight: bold; color: #b0b0dd; background: transparent; border: none;")
+        mode_header.addWidget(mode_title)
+
+        self.mine_mode_btn = QPushButton("Mine Mode")
+        self.mine_mode_btn.setCheckable(True)
+        self.mine_mode_btn.setChecked(True)
+        self.mine_mode_btn.setFixedWidth(120)
+        self.mine_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a6e2a; border: 2px solid #50e050;
+                border-radius: 4px; color: #e0ffe0; font-weight: bold;
+                font-size: 12px; padding: 6px 12px;
+            }
+            QPushButton:!checked {
+                background-color: #2a2a4a; border: 1px solid #4a4a6e;
+                color: #8888aa;
+            }
+            QPushButton:!checked:hover { background-color: #333360; }
+        """)
+        self.mine_mode_btn.clicked.connect(lambda: self._set_mining_mode("mine"))
+        mode_header.addWidget(self.mine_mode_btn)
+
+        self.blind_mode_btn = QPushButton("Blind Mode")
+        self.blind_mode_btn.setCheckable(True)
+        self.blind_mode_btn.setChecked(False)
+        self.blind_mode_btn.setFixedWidth(120)
+        self.blind_mode_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a2a4a; border: 1px solid #4a4a6e;
+                border-radius: 4px; color: #8888aa; font-weight: bold;
+                font-size: 12px; padding: 6px 12px;
+            }
+            QPushButton:checked {
+                background-color: #6e2a6e; border: 2px solid #e050e0;
+                color: #ffe0ff;
+            }
+            QPushButton:!checked:hover { background-color: #333360; }
+        """)
+        self.blind_mode_btn.clicked.connect(lambda: self._set_mining_mode("blind"))
+        mode_header.addWidget(self.blind_mode_btn)
+
+        self.mode_status_label = QLabel("Keys saved locally for your use")
+        self.mode_status_label.setStyleSheet("font-size: 11px; color: #50e050; font-weight: bold; background: transparent; border: none;")
+        mode_header.addWidget(self.mode_status_label)
+        mode_header.addStretch()
+        mode_layout.addLayout(mode_header)
+
+        self.blind_wallet_widget = QWidget()
+        self.blind_wallet_widget.setStyleSheet("background: transparent; border: none;")
+        blind_wallet_layout = QVBoxLayout(self.blind_wallet_widget)
+        blind_wallet_layout.setContentsMargins(0, 4, 0, 0)
+        blind_wallet_layout.setSpacing(4)
+
+        bw_row = QHBoxLayout()
+        bw_row.setSpacing(8)
+        bw_lbl = QLabel("Seller Wallet:")
+        bw_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; border: none;")
+        bw_row.addWidget(bw_lbl)
+        self.seller_wallet_edit = QLineEdit()
+        self.seller_wallet_edit.setPlaceholderText("Set SOLANA_DEVNET_PRIVKEY env var or load from file")
+        self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
+        env_key = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+        if env_key:
+            self.seller_wallet_edit.setText(env_key)
+        bw_row.addWidget(self.seller_wallet_edit)
+
+        load_key_btn = QPushButton("Load Key File")
+        load_key_btn.setFixedWidth(110)
+        load_key_btn.clicked.connect(self._load_seller_key_file)
+        bw_row.addWidget(load_key_btn)
+
+        show_key_btn = QPushButton("Show/Hide")
+        show_key_btn.setFixedWidth(90)
+        show_key_btn.clicked.connect(self._toggle_seller_key_visibility)
+        bw_row.addWidget(show_key_btn)
+        blind_wallet_layout.addLayout(bw_row)
+
+        blind_info = QLabel(
+            "Blind Mode: Private keys are encrypted with Lit Protocol and uploaded to the Solana devnet marketplace. "
+            "You will NOT see the private key — only buyers who meet access conditions can decrypt it."
+        )
+        blind_info.setWordWrap(True)
+        blind_info.setStyleSheet("font-size: 10px; color: #c878c8; background: transparent; border: none; padding: 2px 0;")
+        blind_wallet_layout.addWidget(blind_info)
+
+        self.blind_wallet_widget.setVisible(False)
+        mode_layout.addWidget(self.blind_wallet_widget)
+
+        root.addWidget(mode_frame)
+
+        self._mining_mode = "mine"
+
         status_row = QHBoxLayout()
         status_row.setSpacing(12)
 
@@ -699,67 +811,19 @@ class MainWindow(QMainWindow):
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
-        seller_box = QGroupBox("Seller - Upload Encrypted Keys")
-        seller_layout = QVBoxLayout(seller_box)
-        seller_layout.setSpacing(8)
-
-        wallet_row = QHBoxLayout()
-        wallet_row.setSpacing(8)
-        wallet_lbl = QLabel("Seller Wallet (base58 private key):")
-        wallet_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
-        wallet_row.addWidget(wallet_lbl)
-        self.seller_wallet_edit = QLineEdit()
-        self.seller_wallet_edit.setPlaceholderText("Set SOLANA_DEVNET_PRIVKEY env var or load from file")
-        self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
-        env_key = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
-        if env_key:
-            self.seller_wallet_edit.setText(env_key)
-        wallet_row.addWidget(self.seller_wallet_edit)
-
-        load_key_btn = QPushButton("Load Key File")
-        load_key_btn.setFixedWidth(110)
-        load_key_btn.clicked.connect(self._load_seller_key_file)
-        wallet_row.addWidget(load_key_btn)
-
-        show_key_btn = QPushButton("Show/Hide")
-        show_key_btn.setFixedWidth(90)
-        show_key_btn.clicked.connect(self._toggle_seller_key_visibility)
-        wallet_row.addWidget(show_key_btn)
-
-        seller_layout.addLayout(wallet_row)
-
-        key_hint = QLabel(
-            "Tip: VNC doesn't support clipboard paste. Use the 'Load Key File' button to load your private key "
-            "from a .txt file, or set the SOLANA_DEVNET_PRIVKEY secret in Replit."
+        info_lbl = QLabel(
+            "Browse vanity key packages uploaded by sellers in Blind Mode. "
+            "Select a package and decrypt to reveal the private key using Lit Protocol."
         )
-        key_hint.setWordWrap(True)
-        key_hint.setStyleSheet("font-size: 10px; color: #6868a0; background: transparent; padding: 2px 0;")
-        seller_layout.addWidget(key_hint)
-
-        toggle_row = QHBoxLayout()
-        toggle_row.setSpacing(12)
-        self.auto_upload_check = QCheckBox("Auto-upload found keys to Solana devnet")
-        self.auto_upload_check.setStyleSheet("color: #c8c8e0; font-size: 12px; background: transparent;")
-        self.auto_upload_check.toggled.connect(self._on_auto_upload_toggled)
-        toggle_row.addWidget(self.auto_upload_check)
-        toggle_row.addStretch()
+        info_lbl.setWordWrap(True)
+        info_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; padding: 4px 0;")
+        root.addWidget(info_lbl)
 
         self.upload_status_label = QLabel("")
         self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
-        toggle_row.addWidget(self.upload_status_label)
-        seller_layout.addLayout(toggle_row)
+        root.addWidget(self.upload_status_label)
 
-        info_lbl = QLabel(
-            "When enabled, each mined vanity key is encrypted with Lit Protocol and uploaded to a Solana devnet PDA. "
-            "The private key is never exposed - only buyers who meet the access conditions can decrypt it."
-        )
-        info_lbl.setWordWrap(True)
-        info_lbl.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent; padding: 4px 0;")
-        seller_layout.addWidget(info_lbl)
-
-        root.addWidget(seller_box)
-
-        buyer_box = QGroupBox("Buyer - Browse & Decrypt Packages")
+        buyer_box = QGroupBox("Browse & Decrypt Packages")
         buyer_layout = QVBoxLayout(buyer_box)
         buyer_layout.setSpacing(8)
 
@@ -827,29 +891,38 @@ class MainWindow(QMainWindow):
 
         return tab
 
-    def _on_auto_upload_toggled(self, checked):
-        self._marketplace_auto_upload = checked
-        if checked:
+    def _set_mining_mode(self, mode):
+        if mode == "blind":
             wallet = self.seller_wallet_edit.text().strip()
             if not wallet:
-                self.auto_upload_check.setChecked(False)
-                self._mp_log("Auto-upload requires a seller wallet. Paste your base58 private key first.")
+                self.mine_mode_btn.setChecked(True)
+                self.blind_mode_btn.setChecked(False)
+                self._on_log("Blind Mode requires a seller wallet. Set SOLANA_DEVNET_PRIVKEY or load a key file first.")
                 return
             try:
                 from core.marketplace.solana_client import load_seller_keypair
                 kp = load_seller_keypair(wallet)
-                self._mp_log(f"Seller wallet validated: {kp.pubkey()}")
+                self._on_log(f"Seller wallet validated: {kp.pubkey()}")
             except Exception as e:
-                self.auto_upload_check.setChecked(False)
-                self._mp_log(f"Invalid seller key: {e}")
+                self.mine_mode_btn.setChecked(True)
+                self.blind_mode_btn.setChecked(False)
+                self._on_log(f"Invalid seller key: {e}")
                 return
-            self._mp_log("Auto-upload enabled. Found vanity keys will be encrypted and uploaded to devnet.")
-            self.upload_status_label.setText("Auto-upload: ON")
-            self.upload_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
+
+        self._mining_mode = mode
+        self.mine_mode_btn.setChecked(mode == "mine")
+        self.blind_mode_btn.setChecked(mode == "blind")
+        self.blind_wallet_widget.setVisible(mode == "blind")
+
+        if mode == "mine":
+            self.mode_status_label.setText("Keys saved locally for your use")
+            self.mode_status_label.setStyleSheet("font-size: 11px; color: #50e050; font-weight: bold; background: transparent; border: none;")
+            self.upload_status_label.setText("")
         else:
-            self._mp_log("Auto-upload disabled.")
-            self.upload_status_label.setText("Auto-upload: OFF")
-            self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+            self.mode_status_label.setText("Keys encrypted + uploaded to marketplace")
+            self.mode_status_label.setStyleSheet("font-size: 11px; color: #e050e0; font-weight: bold; background: transparent; border: none;")
+            self.upload_status_label.setText("Blind Mode active")
+            self.upload_status_label.setStyleSheet("color: #e050e0; font-size: 11px; font-weight: bold; background: transparent;")
 
     def _load_seller_key_file(self):
         path, _ = QFileDialog.getOpenFileName(
@@ -971,13 +1044,14 @@ class MainWindow(QMainWindow):
         self._mp_log(f"Decryption error: {err}")
 
     def _on_found_with_key(self, pubkey: str, pv_bytes: bytes):
-        if not self._marketplace_auto_upload:
+        if self._mining_mode != "blind":
             return
 
-        wallet = self.seller_wallet_edit.text().strip()
+        wallet = self._blind_wallet_snapshot
         if not wallet:
             return
 
+        self._on_log(f"[Blind] Encrypting and uploading key for {pubkey}...")
         self._mp_log(f"Encrypting and uploading key for {pubkey}...")
 
         def _upload():
@@ -1017,14 +1091,15 @@ class MainWindow(QMainWindow):
         sig = result.get("signature", "")
         pda = result.get("pda", "")
         url = result.get("explorer_url", "")
+        self._on_log(f"[Blind] Uploaded {pubkey[:20]}... -> PDA: {pda[:20]}...")
         self._mp_log(f"Uploaded {pubkey} -> PDA: {pda}")
         self._mp_log(f"  TX: {sig}")
         self._mp_log(f"  Explorer: {url}")
         self.upload_status_label.setText(f"Last upload: {pubkey[:12]}...")
 
     def _on_upload_error(self, err, pubkey):
+        self._on_log(f"[Blind] Upload failed for {pubkey[:20]}...: {err[:60]}")
         self._mp_log(f"Upload failed for {pubkey}: {err}")
-        self._mp_log("Key was saved locally. You can retry upload later.")
 
     def _load_word_count(self):
         self._word_count_timer.start(400)
@@ -1139,7 +1214,13 @@ class MainWindow(QMainWindow):
             iteration_bits=DEFAULT_ITERATION_BITS,
             power_pct=power_pct,
             max_temp=max_temp,
+            mining_mode=self._mining_mode,
         )
+
+        self._blind_wallet_snapshot = self.seller_wallet_edit.text().strip() if self._mining_mode == "blind" else ""
+
+        if self._mining_mode == "blind":
+            self._on_log(f"[Blind] Mining in Blind Mode - keys will be encrypted and uploaded")
 
         self.start_btn.setText("Stop Mining")
         self.start_btn.setObjectName("stopBtn")
@@ -1249,6 +1330,8 @@ class MainWindow(QMainWindow):
         self.wordlist_edit.setEnabled(enabled)
         self.power_slider.setEnabled(enabled)
         self.max_temp_spin.setEnabled(enabled)
+        self.mine_mode_btn.setEnabled(enabled)
+        self.blind_mode_btn.setEnabled(enabled)
 
     def _on_found(self, address, suffix, elapsed, count):
         row = self.results_table.rowCount()

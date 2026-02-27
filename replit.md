@@ -37,16 +37,22 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
   - `lit_encrypt.py` - Lit Protocol encryption/decryption wrapper for private keys
 
-## Marketplace Feature
-The marketplace enables blind vanity key trading on Solana devnet:
+## Mining Modes
+The Word Miner tab has a mode toggle:
 
-### Seller Flow
-1. GPU mines a vanity address (Word Miner tab)
-2. If "Auto-upload" is enabled in the Marketplace tab, the private key is automatically:
-   - Encrypted with Lit Protocol (datil network) using solRpc getBalance access conditions
-   - Packaged as JSON (ciphertext + hash + vanity address + conditions)
-   - Uploaded to a deterministic PDA on Solana devnet
-3. The private key is never exposed; only buyers meeting access conditions can decrypt
+### Mine Mode (default)
+- Found vanity keys are saved locally as .txt files
+- Private key is visible to the user
+- Standard behavior for personal vanity address mining
+
+### Blind Mode
+- Found vanity keys are encrypted with Lit Protocol (datil network) and uploaded to a Solana devnet PDA
+- The private key is NEVER saved locally or shown to the user
+- Requires a seller wallet (base58 private key) configured in the inline wallet input
+- Only buyers who meet the solRpc getBalance access conditions can decrypt
+
+## Marketplace Feature
+The Marketplace tab enables buying/decrypting blind vanity keys:
 
 ### Buyer Flow
 1. Click "Browse Packages" to fetch all uploaded PDAs from the on-chain program
@@ -75,7 +81,8 @@ The marketplace enables blind vanity key trading on Solana devnet:
 - Live GPU temperature display (color-coded: green/yellow/red) in dedicated panel
 - Found Addresses table with word suffix and timing
 - Log panel
-- Marketplace seller panel with auto-upload toggle
+- Mine/Blind mode toggle with color-coded status indicators
+- Blind Mode inline seller wallet configuration
 - Marketplace buyer panel with package browser and decrypt
 
 ## Word Processing
