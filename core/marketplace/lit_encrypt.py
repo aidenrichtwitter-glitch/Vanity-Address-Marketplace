@@ -54,8 +54,63 @@ def _get_lit_client():
     global _lit_client
     with _lit_lock:
         if _lit_client is None:
+            import shutil
+            import subprocess as _sp
+            node_path = shutil.which("node")
+            if not node_path:
+                raise RuntimeError(
+                    "Node.js is not installed or not in PATH. "
+                    "Lit Protocol requires Node.js. Install it from https://nodejs.org/"
+                )
+            try:
+                node_ver = _sp.check_output(
+                    [node_path, "--version"], timeout=5
+                ).decode().strip()
+            except Exception:
+                node_ver = "unknown"
+            logger.info("Node.js found: %s (%s)", node_path, node_ver)
+
             from lit_python_sdk import LitClient
-            _lit_client = LitClient()
+
+            orig_wait = LitClient._wait_for_server
+            LitClient._wait_for_server = lambda self, timeout=60: orig_wait(self, timeout=timeout)
+
+            from lit_python_sdk.server import NodeServer
+            _orig_node_start = NodeServer.start
+            _captured_server = [None]
+
+            def _capturing_start(srv_self):
+                _captured_server[0] = srv_self
+                return _orig_node_start(srv_self)
+
+            NodeServer.start = _capturing_start
+            try:
+                _lit_client = LitClient()
+            except (TimeoutError, Exception) as exc:
+                server_logs = ""
+                srv = _captured_server[0]
+                if srv and hasattr(srv, "get_logs"):
+                    server_logs = srv.get_logs()
+                log_snippet = ""
+                if server_logs:
+                    log_snippet = f"\nLit server output:\n{server_logs[-3000:]}"
+                _lit_client = None
+                raise RuntimeError(
+                    f"Lit Node.js server failed to start (Node.js: {node_ver}). "
+                    f"Error: {exc}. "
+                    f"Make sure Node.js v18+ is installed and no firewall blocks localhost:3092."
+                    f"{log_snippet}"
+                ) from exc
+            finally:
+                LitClient._wait_for_server = orig_wait
+                NodeServer.start = _orig_node_start
+
+            srv = _captured_server[0]
+            if srv and hasattr(srv, "get_logs"):
+                startup_logs = srv.get_logs()
+                if startup_logs.strip():
+                    logger.info("Lit server startup logs:\n%s", startup_logs[-2000:])
+
             _lit_client.new(lit_network=LIT_NETWORK)
             _lit_client.connect()
             logger.info("Lit Protocol client connected (network: %s)", LIT_NETWORK)
