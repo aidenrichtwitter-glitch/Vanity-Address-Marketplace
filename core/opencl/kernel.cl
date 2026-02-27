@@ -1,4 +1,3 @@
-#define __generic
 #ifndef NULL
 #define NULL 0L
 #endif
@@ -75,7 +74,7 @@ typedef struct __attribute__((aligned(32))) {
 */
 
 inline __attribute__((always_inline))
-void fe_0(__generic fe h) {
+void fe_0(fe h) {
   h[0] = 0;
   h[1] = 0;
   h[2] = 0;
@@ -2205,7 +2204,7 @@ constant ge_precomp base[32][8] = {
 };
 
 inline __attribute__((always_inline))
-void fe_mul(__generic fe h, const __generic fe f, const __generic fe g) {
+void fe_mul(fe h, const fe f, const fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2427,7 +2426,7 @@ void fe_mul(__generic fe h, const __generic fe f, const __generic fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_sub(__generic fe h, const __generic fe f, const __generic fe g) {
+void fe_sub(fe h, const fe f, const fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2472,7 +2471,7 @@ void fe_sub(__generic fe h, const __generic fe f, const __generic fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_add(__generic fe h, const __generic fe f, const __generic fe g) {
+void fe_add(fe h, const fe f, const fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2517,7 +2516,7 @@ void fe_add(__generic fe h, const __generic fe f, const __generic fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_tobytes(unsigned char *s, const __generic fe h) {
+void fe_tobytes(unsigned char *s, const fe h) {
   int32_t h0 = h[0];
   int32_t h1 = h[1];
   int32_t h2 = h[2];
@@ -2625,7 +2624,7 @@ void fe_tobytes(unsigned char *s, const __generic fe h) {
 }
 
 inline __attribute__((always_inline))
-void fe_1(__generic fe h) {
+void fe_1(fe h) {
   h[0] = 1;
   h[1] = 0;
   h[2] = 0;
@@ -2657,7 +2656,7 @@ void fe_1(__generic fe h) {
     Preconditions: b in {0,1}.
 */
 inline __attribute__((always_inline))
-void fe_cmov__constant(__generic fe f, constant fe g, unsigned int b) {
+void fe_cmov__constant(fe f, constant fe g, unsigned int b) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2714,7 +2713,7 @@ void fe_cmov__constant(__generic fe f, constant fe g, unsigned int b) {
 }
 
 inline __attribute__((always_inline))
-void fe_cmov(__generic fe f, const __generic fe g, unsigned int b) {
+void fe_cmov(fe f, const fe g, unsigned int b) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2771,7 +2770,7 @@ void fe_cmov(__generic fe f, const __generic fe g, unsigned int b) {
 }
 
 inline __attribute__((always_inline))
-void fe_sq(__generic fe h, const __generic fe f) {
+void fe_sq(fe h, const fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2923,7 +2922,7 @@ void fe_sq(__generic fe h, const __generic fe f) {
 */
 
 inline __attribute__((always_inline))
-void fe_copy(__generic fe h, const __generic fe f) {
+void fe_copy(fe h, const fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2948,7 +2947,7 @@ void fe_copy(__generic fe h, const __generic fe f) {
 }
 
 inline __attribute__((always_inline))
-void fe_invert(__generic fe out, const __generic fe z) {
+void fe_invert(fe out, const fe z) {
   fe t0;
   fe t1;
   fe t2;
@@ -3035,7 +3034,7 @@ void fe_invert(__generic fe out, const __generic fe z) {
 */
 
 inline __attribute__((always_inline))
-int fe_isnegative(const __generic fe f) {
+int fe_isnegative(const fe f) {
   unsigned char s[32];
 
   fe_tobytes(s, f);
@@ -3086,7 +3085,7 @@ Postconditions:
 */
 
 inline __attribute__((always_inline))
-void fe_neg(__generic fe h, const __generic fe f) {
+void fe_neg(fe h, const fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -3151,7 +3150,7 @@ See fe_mul.c for discussion of implementation strategy.
 */
 
 inline __attribute__((always_inline))
-void fe_sq2(__generic fe h, const __generic fe f) {
+void fe_sq2(fe h, const fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
