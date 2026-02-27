@@ -86,11 +86,8 @@ def fulfill_bounty(bounty_id, vanity_address, mint_address):
     return bounty, None
 
 
-def search_packages(search_filter=""):
-    from core.marketplace.solana_client import fetch_all_packages
+def _enrich_packages(packages):
     from core.marketplace.nft import check_nft_supply
-
-    packages = fetch_all_packages()
 
     for pkg in packages:
         mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
@@ -117,6 +114,17 @@ def search_packages(search_filter=""):
             pkg["price"] = "Free"
             pkg["price_lamports"] = 0
 
+    return packages
+
+
+def search_packages(search_filter=""):
+    from core.marketplace.solana_client import fetch_all_packages
+
+    packages = fetch_all_packages()
+    packages = _enrich_packages(packages)
+
+    packages = [p for p in packages if p.get("nft_status") != "BURNED"]
+
     search_filter = (search_filter or "").strip().lower()
     if search_filter:
         packages = [
@@ -126,6 +134,46 @@ def search_packages(search_filter=""):
         ]
 
     return packages
+
+
+def get_owned_nfts(buyer_key, log_fn=None):
+    if log_fn is None:
+        log_fn = lambda msg: log.info(msg)
+
+    if not buyer_key:
+        return None, "Wallet private key required"
+
+    try:
+        from core.marketplace.solana_client import load_seller_keypair, fetch_all_packages
+        from core.marketplace.nft import check_nft_supply, check_token_balance
+
+        buyer_kp = load_seller_keypair(buyer_key)
+        buyer_pub = buyer_kp.pubkey()
+        log_fn(f"Checking NFTs for {buyer_pub}...")
+
+        packages = fetch_all_packages()
+        packages = _enrich_packages(packages)
+
+        owned = []
+        for pkg in packages:
+            if pkg.get("nft_status") != "ACTIVE":
+                continue
+            mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
+            if not mint_addr:
+                continue
+            try:
+                balance = check_token_balance(buyer_pub, mint_addr)
+                if balance > 0:
+                    owned.append(pkg)
+            except Exception:
+                pass
+
+        log_fn(f"Found {len(owned)} owned NFTs")
+        return {"owned": owned, "wallet": str(buyer_pub)}, None
+
+    except Exception as e:
+        log_fn(f"Failed to check owned NFTs: {e}")
+        return None, str(e)
 
 
 def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,

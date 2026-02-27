@@ -145,6 +145,20 @@
                 <span class="field-label" style="width:75px">Private Key:</span>
                 <input type="password" id="buyerWallet" placeholder="Base58 private key (needed to burn NFT and decrypt)" style="flex:1">
                 <button class="btn btn-secondary" onclick="toggleVisibility('buyerWallet')">Show</button>
+                <button class="btn btn-search" id="loadWalletBtn" onclick="loadOwnedNfts()">Import</button>
+            </div>
+            <div id="ownedSection" style="display:none;margin-top:8px">
+                <div class="inline-row" style="margin-bottom:4px">
+                    <span class="field-label" style="color:#aaa">Address:</span>
+                    <span id="walletAddress" style="color:#64e678;font-family:monospace;font-size:12px"></span>
+                </div>
+                <div class="table-container" style="max-height:180px">
+                    <table>
+                        <thead><tr><th>Word</th><th>Suffix</th><th>NFT</th><th>Price</th><th>Actions</th></tr></thead>
+                        <tbody id="ownedTable"></tbody>
+                    </table>
+                </div>
+                <span class="mp-status" id="ownedStatus"></span>
             </div>
         </div>
 

@@ -554,6 +554,16 @@ def api_marketplace_search():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/marketplace/owned", methods=["POST"])
+def api_marketplace_owned():
+    data = request.json or {}
+    buyer_key = data.get("buyer_key", "").strip()
+    result, err = shared.get_owned_nfts(buyer_key)
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify(result)
+
+
 @app.route("/api/marketplace/buy", methods=["POST"])
 def api_marketplace_buy():
     buy_log = logging.getLogger("marketplace.buy")

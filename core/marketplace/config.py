@@ -12,7 +12,7 @@ RPC_URL = "https://api.devnet.solana.com"
 
 LIT_NETWORK = "chipotle-dev"
 
-LIT_API_BASE = "https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.network/core/v1"
+LIT_API_BASE = "https://api.dev.litprotocol.com/core/v1"
 
 SOL_RPC_CONDITIONS = [
     {
