@@ -6,6 +6,8 @@ dist/
 build/
 .eggs/
 found_words/
+decrypted_keys/
+uploaded_wordlists/
 found_addresses.txt
 *.json
 !package.json

@@ -31,7 +31,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (variable-length suffix matching); uses `ADDR_GENERIC` macro for cross-GPU compatibility (expands to `__generic` on OpenCL 2.0+, empty on 1.2)
 - `core/opencl/manager.py` - OpenCL device manager
 - `core/word_miner.py` - GPU word mining engine with persistent workers; PID thermal controller
-- CPU mining mode also available (pure Python: `secrets.token_bytes` + nacl Ed25519 + base58); ~10K keys/s — suitable for testing or machines without GPU
+- CPU mining mode also available (pure Python: `secrets.token_bytes` + nacl Ed25519 + base58); ~10K keys/s — suitable for testing or machines without GPU; supports `simple_suffix` param for instant single-character matching (bypasses WordFilter padding check)
 - `core/word_filter.py` - Suffix word detection with literal "X" padding check
 - `core/words.py` - Word list loader with l to 1 substitution; saves processed list to wordlists/ folder
 - `core/utils/crypto.py` - Ed25519 keypair generation; saves as {word}.txt with address and Base58 private key

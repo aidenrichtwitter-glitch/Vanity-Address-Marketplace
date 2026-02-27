@@ -159,7 +159,7 @@
             </div>
             <div class="table-container">
                 <table>
-                    <thead><tr><th>Vanity Address</th><th>Word</th><th>NFT Mint</th><th>Price</th><th>Status</th><th>Verified</th></tr></thead>
+                    <thead><tr><th>Word</th><th>Suffix</th><th>NFT</th><th>Price</th><th>Status</th><th>Verified</th></tr></thead>
                     <tbody id="packagesTable"></tbody>
                 </table>
             </div>
@@ -593,10 +593,11 @@ function searchPackages() {
 
             const addr = pkg.vanity_address || 'unknown';
             const vanityWord = (pkg.encrypted_json || {}).vanityWord || '-';
-            const mint = (pkg.encrypted_json || {}).mintAddress || '-';
+            const mint = (pkg.encrypted_json || {}).mintAddress || '';
             const price = pkg.price || 'Free';
             const nftStatus = pkg.nft_status || 'unknown';
             const verified = pkg.verified || 'Unverified';
+            const suffix = addr.length >= 6 ? addr.slice(-6) : addr;
 
             let statusClass = 'status-unknown';
             if (nftStatus === 'ACTIVE') statusClass = 'status-active';
@@ -606,7 +607,9 @@ function searchPackages() {
             if (verified === 'TEE Verified') verifiedClass = 'verified-tee';
             else if (verified === 'Unknown Code') verifiedClass = 'verified-unknown';
 
-            tr.innerHTML = `<td class="addr-cell">${esc(addr)}</td><td class="word-cell">${esc(vanityWord)}</td><td class="mint-cell">${esc(mint)}</td><td class="price-cell">${esc(price)}</td><td class="${statusClass}">${esc(nftStatus)}</td><td class="${verifiedClass}">${esc(verified)}</td>`;
+            const mintLink = mint ? `<a href="https://explorer.solana.com/address/${esc(mint)}?cluster=devnet" target="_blank" class="nft-link" title="${esc(mint)}">${esc(mint.slice(0, 6))}...</a>` : '-';
+
+            tr.innerHTML = `<td class="word-cell">${esc(vanityWord)}</td><td class="suffix-cell">...${esc(suffix)}</td><td class="mint-cell">${mintLink}</td><td class="price-cell">${esc(price)}</td><td class="${statusClass}">${esc(nftStatus)}</td><td class="${verifiedClass}">${esc(verified)}</td>`;
             tbody.appendChild(tr);
         });
     })

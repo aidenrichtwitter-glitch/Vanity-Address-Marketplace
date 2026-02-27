@@ -61,13 +61,16 @@ def broadcast_event(event_type, data):
             event_queues.remove(q)
 
 
-def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_event):
+def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_event, simple_suffix=None):
     try:
         import secrets
         from nacl.signing import SigningKey
         from base58 import b58encode
 
-        broadcast_event("log", {"msg": "CPU mining mode — no GPU required"})
+        if simple_suffix:
+            broadcast_event("log", {"msg": f"CPU mining mode — simple suffix match: ends with '{simple_suffix}'"})
+        else:
+            broadcast_event("log", {"msg": "CPU mining mode — no GPU required"})
         broadcast_event("status", {"msg": "Mining (CPU)..."})
 
         Path(output_dir).mkdir(parents=True, exist_ok=True)
@@ -87,7 +90,16 @@ def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_e
             pubkey = b58encode(pk_bytes).decode()
             keys_checked += 1
 
-            word, padding = word_filter.check_address(pubkey)
+            if simple_suffix:
+                if pubkey.endswith(simple_suffix):
+                    word = simple_suffix
+                    padding = ""
+                else:
+                    word = None
+                    padding = None
+            else:
+                word, padding = word_filter.check_address(pubkey)
+
             if word:
                 pv_bytes = bytes(sk)
                 suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
@@ -416,6 +428,7 @@ def api_start():
     blind_wallet = data.get("blind_wallet", "")
     blind_price_sol = data.get("blind_price_sol", 0)
     compute_mode = data.get("compute_mode", "cpu")
+    simple_suffix = data.get("simple_suffix", "")
 
     try:
         word_filter = WordFilter(min_length=min_length, wordlist_file=wordlist_file, custom_words=custom_words)
@@ -472,6 +485,7 @@ def api_start():
         t = threading.Thread(
             target=cpu_mining_worker,
             args=(word_filter, output_dir, mining_mode, blind_wallet, _stop_event),
+            kwargs={"simple_suffix": simple_suffix} if simple_suffix else {},
             daemon=True,
         )
 
