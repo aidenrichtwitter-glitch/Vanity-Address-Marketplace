@@ -847,8 +847,15 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_marketplace_tab(self):
+        from PySide6.QtWidgets import QScrollArea
         tab = QWidget()
-        root = QVBoxLayout(tab)
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        inner = QWidget()
+        root = QVBoxLayout(inner)
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
@@ -1045,6 +1052,8 @@ class MainWindow(QMainWindow):
 
         self._load_bounties()
 
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
         return tab
 
     def _set_mining_mode(self, mode):
