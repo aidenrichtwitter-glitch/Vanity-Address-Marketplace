@@ -25,6 +25,40 @@ from core.marketplace.config import (
 logger = logging.getLogger(__name__)
 
 
+def transfer_sol(
+    from_kp: Keypair,
+    to_pubkey: Pubkey,
+    lamports: int,
+    rpc_url: str = RPC_URL,
+) -> str:
+    from solders.system_program import transfer, TransferParams
+    client = Client(rpc_url)
+
+    ix = transfer(TransferParams(
+        from_pubkey=from_kp.pubkey(),
+        to_pubkey=to_pubkey,
+        lamports=lamports,
+    ))
+
+    bh_resp = client.get_latest_blockhash(Confirmed)
+    blockhash = bh_resp.value.blockhash
+
+    msg = MessageV0.try_compile(
+        payer=from_kp.pubkey(),
+        instructions=[ix],
+        address_lookup_table_accounts=[],
+        recent_blockhash=blockhash,
+    )
+
+    tx = VersionedTransaction(msg, [from_kp])
+    sig_resp = client.send_transaction(
+        tx, opts=TxOpts(skip_preflight=True, preflight_commitment=Confirmed)
+    )
+    sig = str(sig_resp.value)
+    logger.info("Transferred %d lamports to %s (sig: %s)", lamports, to_pubkey, sig)
+    return sig
+
+
 def get_pda(vanity_pubkey: Pubkey) -> Pubkey:
     seeds = [PDA_SEED_PREFIX, bytes(vanity_pubkey)]
     pda, _ = Pubkey.find_program_address(seeds, PROGRAM_ID)

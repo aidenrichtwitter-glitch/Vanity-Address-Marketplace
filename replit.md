@@ -51,11 +51,11 @@ The Word Miner tab has a mode toggle:
 - Standard behavior for personal vanity address mining
 
 ### Blind Mode
-- Found vanity keys are encrypted inside Lit Protocol's TEE via a Lit Action (datil network) and uploaded to a Solana devnet PDA
-- Encryption happens inside Lit's Trusted Execution Environment, not on the seller's machine — the Lit Action code is auditable and its SHA-256 hash is stored on-chain with each package
+- Found vanity keys are uploaded to a Solana devnet PDA paired with an NFT
 - An NFT (SPL token, supply=1) is minted alongside each upload to enable burn-to-decrypt
-- The encrypted JSON includes mintAddress, sellerAddress, vanityWord, litActionHash, and encryptedInTEE fields
-- The private key is NEVER saved locally or shown to the user
+- The package JSON includes mintAddress, sellerAddress, vanityWord, priceLamports, and encryptedInTEE fields
+- Seller sets a price in SOL (stored as priceLamports in the package); 0 = free
+- The private key is NEVER saved locally or shown to the user in production (currently plaintext in test mode since Lit Protocol is unreachable from Replit)
 - Requires a seller wallet (base58 private key) configured in the inline wallet input
 - Only buyers who burn the NFT can decrypt the key
 
@@ -74,6 +74,20 @@ The Marketplace tab enables an NFT-based vanity key marketplace:
 4. Select an ACTIVE package and click "Burn & Decrypt"
 5. The app: transfers NFT to buyer → burns NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/` folder
 6. Burned packages show as "SOLD" and cannot be re-purchased
+
+### Pricing
+- Seller sets price in SOL when mining in Blind Mode (Price field in UI)
+- Price stored as `priceLamports` integer in the package JSON uploaded to the PDA
+- When buyer clicks Buy & Burn, SOL is transferred from buyer to seller before NFT transfer
+- Buyer balance is checked before purchase; insufficient funds returns an error
+- Price of 0 = free (no SOL transfer required)
+
+### Bounty Board
+- Buyers can post bounties requesting specific vanity words with SOL rewards
+- Bounties stored locally in `bounties.json` (GET/POST/DELETE via `/api/bounties`)
+- Fields: word, reward_sol, buyer_address, status (open/fulfilled), notes
+- Miners can fulfill bounties by mining the requested word and submitting it
+- Bounty UI in the Marketplace tab with post/cancel/list functionality
 
 ### Saved Keys
 Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:

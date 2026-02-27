@@ -200,12 +200,13 @@ def mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
 
 
 def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
+    price_sol = mining_state.get("blind_price_sol", 0)
+
     def _upload():
         try:
             import base58 as b58_mod
             from nacl.signing import SigningKey
             from core.marketplace.solana_client import load_seller_keypair, upload_package
-            from core.marketplace.lit_encrypt import encrypt_private_key
             from core.marketplace.nft import mint_nft
             from solders.pubkey import Pubkey
 
@@ -218,29 +219,34 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
             pb_bytes = bytes(sk.verify_key)
             privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
 
-            encrypted_json = encrypt_private_key(
-                privkey_b58=privkey_b58,
-                vanity_address=pubkey,
-            )
-            encrypted_json["mintAddress"] = mint_address
-            encrypted_json["sellerAddress"] = str(seller_kp.pubkey())
+            package_json = {
+                "vanityAddress": pubkey,
+                "privateKey": privkey_b58,
+                "mintAddress": mint_address,
+                "sellerAddress": str(seller_kp.pubkey()),
+                "encryptedInTEE": False,
+            }
             if vanity_word:
-                encrypted_json["vanityWord"] = vanity_word
+                package_json["vanityWord"] = vanity_word
+            if price_sol and float(price_sol) > 0:
+                package_json["priceLamports"] = int(float(price_sol) * 1_000_000_000)
 
             vanity_pubkey = Pubkey.from_string(pubkey)
             result = upload_package(
                 seller_kp=seller_kp,
                 vanity_pubkey=vanity_pubkey,
-                encrypted_json=encrypted_json,
+                encrypted_json=package_json,
             )
             sig = result.get("signature", "")
             pda = result.get("pda", "")
             explorer_url = result.get("explorer_url", "")
             nft_url = f"https://explorer.solana.com/address/{mint_address}?cluster=devnet" if mint_address else ""
-            broadcast_event("log", {"msg": f"[Blind] SUCCESS: {pubkey[:20]}... uploaded to marketplace"})
+            price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
+            broadcast_event("log", {"msg": f"[Blind] SUCCESS: {pubkey[:20]}... uploaded ({price_display})"})
             broadcast_event("mp_log", {"msg": f"SUCCESS: Uploaded {pubkey}"})
             broadcast_event("mp_log", {"msg": f"  NFT Mint: {mint_address}"})
             broadcast_event("mp_log", {"msg": f"  PDA: {pda}"})
+            broadcast_event("mp_log", {"msg": f"  Price: {price_display}"})
             broadcast_event("mp_log", {"msg": f"  TX: {sig}"})
             broadcast_event("mp_log", {"msg": f"  Explorer: {explorer_url}"})
             if nft_url:
@@ -369,6 +375,7 @@ def api_start():
     max_temp = data.get("max_temp", 80)
     mining_mode = data.get("mining_mode", "mine")
     blind_wallet = data.get("blind_wallet", "")
+    blind_price_sol = data.get("blind_price_sol", 0)
 
     try:
         word_filter = WordFilter(min_length=min_length, wordlist_file=wordlist_file, custom_words=custom_words)
@@ -405,6 +412,7 @@ def api_start():
         mining_state["mining_mode"] = mining_mode
         mining_state["suffix_pattern_count"] = len(suffix_patterns)
         mining_state["blind_wallet"] = blind_wallet
+        mining_state["blind_price_sol"] = blind_price_sol
         mining_state["count_limit"] = count_limit
 
     broadcast_event("status", {"msg": "Starting..."})
@@ -469,6 +477,22 @@ def api_gpu():
         })
 
 
+BOUNTIES_FILE = Path("bounties.json")
+
+
+def _load_bounties():
+    if BOUNTIES_FILE.exists():
+        try:
+            return json.loads(BOUNTIES_FILE.read_text())
+        except Exception:
+            return []
+    return []
+
+
+def _save_bounties(bounties):
+    BOUNTIES_FILE.write_text(json.dumps(bounties, indent=2))
+
+
 @app.route("/api/marketplace/search", methods=["POST"])
 def api_marketplace_search():
     data = request.json or {}
@@ -477,13 +501,6 @@ def api_marketplace_search():
     try:
         from core.marketplace.solana_client import fetch_all_packages
         from core.marketplace.nft import check_nft_supply
-        from core.marketplace.lit_encrypt import get_lit_action_hash
-
-        known_hash = ""
-        try:
-            known_hash = get_lit_action_hash()
-        except Exception:
-            pass
 
         packages = fetch_all_packages()
 
@@ -499,31 +516,25 @@ def api_marketplace_search():
                 pkg["nft_status"] = "no NFT"
 
             enc_json = pkg.get("encrypted_json", {})
-            pkg_hash = enc_json.get("litActionHash", "")
+
             tee_flag = enc_json.get("encryptedInTEE", False)
-            if pkg_hash and tee_flag and pkg_hash == known_hash:
+            if tee_flag:
                 pkg["verified"] = "TEE Verified"
-            elif pkg_hash and tee_flag:
-                pkg["verified"] = "Unknown Code"
             else:
                 pkg["verified"] = "Unverified"
 
-            conditions = enc_json.get("accessControlConditions", [])
-            price = "Free"
-            for cond in conditions:
-                rvt = cond.get("returnValueTest", {})
-                val = rvt.get("value", "")
-                if val:
-                    try:
-                        lamports = int(val)
-                        sol = lamports / 1_000_000_000
-                        price = f"{sol:.2f} SOL" if sol >= 1 else f"{sol:.4f} SOL"
-                    except ValueError:
-                        pass
-            pkg["price"] = price
+            price_lamports = enc_json.get("priceLamports", 0)
+            if price_lamports and int(price_lamports) > 0:
+                sol = int(price_lamports) / 1_000_000_000
+                pkg["price"] = f"{sol:.4f} SOL" if sol < 1 else f"{sol:.2f} SOL"
+                pkg["price_lamports"] = int(price_lamports)
+            else:
+                pkg["price"] = "Free"
+                pkg["price_lamports"] = 0
 
         if search_filter:
-            packages = [p for p in packages if search_filter in p.get("vanity_address", "").lower()]
+            packages = [p for p in packages if search_filter in p.get("vanity_address", "").lower()
+                        or search_filter in (p.get("encrypted_json", {}).get("vanityWord", "")).lower()]
 
         return jsonify({"packages": packages, "total": len(packages)})
     except Exception as e:
@@ -546,9 +557,9 @@ def api_marketplace_buy():
         return jsonify({"error": "No NFT mint address"}), 400
 
     try:
-        from core.marketplace.solana_client import load_seller_keypair
+        from core.marketplace.solana_client import load_seller_keypair, transfer_sol
         from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
-        from core.marketplace.lit_encrypt import decrypt_private_key
+        from solders.pubkey import Pubkey as SoldersPubkey
 
         supply = check_nft_supply(mint_address)
         if supply == 0:
@@ -556,39 +567,146 @@ def api_marketplace_buy():
 
         buyer_kp = load_seller_keypair(buyer_key)
 
+        price_lamports = int(encrypted_json.get("priceLamports", 0))
+        seller_addr = encrypted_json.get("sellerAddress", "")
+        payment_sig = None
+
+        if price_lamports > 0 and seller_addr:
+            seller_pubkey = SoldersPubkey.from_string(seller_addr)
+            from solana.rpc.api import Client as SolClient
+            from solana.rpc.commitment import Confirmed as SolConfirmed
+            sol_client = SolClient("https://api.devnet.solana.com")
+            buyer_balance = sol_client.get_balance(buyer_kp.pubkey(), SolConfirmed).value
+            if buyer_balance < price_lamports + 10_000:
+                sol_needed = price_lamports / 1_000_000_000
+                sol_have = buyer_balance / 1_000_000_000
+                return jsonify({"error": f"Insufficient SOL. Need {sol_needed:.4f} SOL + fees, have {sol_have:.4f} SOL"}), 400
+
+            payment_sig = transfer_sol(buyer_kp, seller_pubkey, price_lamports)
+            import time
+            time.sleep(2)
+
         balance = check_token_balance(buyer_kp.pubkey(), mint_address)
         if balance == 0:
-            seller_addr = encrypted_json.get("sellerAddress", "")
             if seller_addr:
                 seller_key_env = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
                 if seller_key_env:
-                    seller_kp = load_seller_keypair(seller_key_env)
-                    transfer_nft(seller_kp, buyer_kp.pubkey(), mint_address)
+                    seller_kp_for_transfer = load_seller_keypair(seller_key_env)
+                    transfer_nft(seller_kp_for_transfer, buyer_kp.pubkey(), mint_address)
                 else:
                     return jsonify({"error": "You don't own this NFT. Transfer it first."}), 400
 
         burn_sig = burn_nft(buyer_kp, mint_address)
-        privkey = decrypt_private_key(encrypted_json)
+
+        privkey = encrypted_json.get("privateKey", "")
+        if not privkey:
+            try:
+                from core.marketplace.lit_encrypt import decrypt_private_key
+                privkey = decrypt_private_key(encrypted_json)
+            except Exception as e:
+                privkey = f"(decryption unavailable: {str(e)[:60]})"
 
         out_dir = Path("decrypted_keys")
         out_dir.mkdir(exist_ok=True)
         out_file = out_dir / f"{vanity_address}.txt"
-        out_file.write_text(
-            f"Vanity Address: {vanity_address}\n"
-            f"Private Key: {privkey}\n"
-            f"NFT Mint: {mint_address}\n"
-            f"Burn TX: {burn_sig}\n",
-            encoding="utf-8",
-        )
+        lines = [
+            f"Vanity Address: {vanity_address}",
+            f"Private Key: {privkey}",
+            f"NFT Mint: {mint_address}",
+            f"Burn TX: {burn_sig}",
+        ]
+        if payment_sig:
+            lines.append(f"Payment TX: {payment_sig}")
+            lines.append(f"Price: {price_lamports} lamports ({price_lamports / 1e9:.4f} SOL)")
+        out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-        return jsonify({
+        result = {
             "ok": True,
             "file": str(out_file),
             "burn_sig": burn_sig,
             "vanity_address": vanity_address,
-        })
+        }
+        if payment_sig:
+            result["payment_sig"] = payment_sig
+            result["price_sol"] = price_lamports / 1_000_000_000
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/bounties", methods=["GET"])
+def api_bounties_list():
+    bounties = _load_bounties()
+    return jsonify({"bounties": bounties})
+
+
+@app.route("/api/bounties", methods=["POST"])
+def api_bounties_create():
+    data = request.json or {}
+    word = data.get("word", "").strip().lower()
+    reward_sol = data.get("reward_sol", 0)
+    buyer_address = data.get("buyer_address", "").strip()
+    notes = data.get("notes", "").strip()
+
+    if not word:
+        return jsonify({"error": "Word is required"}), 400
+    if not reward_sol or float(reward_sol) <= 0:
+        return jsonify({"error": "Reward must be greater than 0"}), 400
+    if not buyer_address:
+        return jsonify({"error": "Buyer wallet address is required"}), 400
+
+    bounty = {
+        "id": int(time.time() * 1000),
+        "word": word,
+        "reward_sol": float(reward_sol),
+        "reward_lamports": int(float(reward_sol) * 1_000_000_000),
+        "buyer_address": buyer_address,
+        "notes": notes,
+        "status": "open",
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+    bounties = _load_bounties()
+    bounties.append(bounty)
+    _save_bounties(bounties)
+
+    broadcast_event("mp_log", {"msg": f"Bounty posted: '{word}' for {reward_sol} SOL by {buyer_address[:12]}..."})
+    return jsonify({"ok": True, "bounty": bounty})
+
+
+@app.route("/api/bounties/<int:bounty_id>", methods=["DELETE"])
+def api_bounties_delete(bounty_id):
+    bounties = _load_bounties()
+    bounties = [b for b in bounties if b.get("id") != bounty_id]
+    _save_bounties(bounties)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/bounties/<int:bounty_id>/fulfill", methods=["POST"])
+def api_bounties_fulfill(bounty_id):
+    data = request.json or {}
+    vanity_address = data.get("vanity_address", "").strip()
+    mint_address = data.get("mint_address", "").strip()
+
+    bounties = _load_bounties()
+    bounty = None
+    for b in bounties:
+        if b.get("id") == bounty_id:
+            bounty = b
+            break
+    if not bounty:
+        return jsonify({"error": "Bounty not found"}), 404
+    if bounty.get("status") != "open":
+        return jsonify({"error": "Bounty is no longer open"}), 400
+
+    bounty["status"] = "fulfilled"
+    bounty["vanity_address"] = vanity_address
+    bounty["mint_address"] = mint_address
+    bounty["fulfilled_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+    _save_bounties(bounties)
+
+    broadcast_event("mp_log", {"msg": f"Bounty fulfilled: '{bounty['word']}' -> {vanity_address[:20]}..."})
+    return jsonify({"ok": True, "bounty": bounty})
 
 
 if __name__ == "__main__":

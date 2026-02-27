@@ -77,9 +77,14 @@
                     <input type="password" id="sellerWallet" placeholder="Set SOLANA_DEVNET_PRIVKEY env var or paste key" style="flex:1">
                     <button class="btn btn-secondary" onclick="toggleVisibility('sellerWallet')">Show</button>
                 </div>
+                <div class="inline-row" style="margin-top:6px">
+                    <span class="field-label" style="width:90px">Price (SOL):</span>
+                    <input type="number" id="blindPrice" value="0.1" min="0" step="0.01" style="width:120px">
+                    <span class="field-label" style="color:#a0a0c0">0 = Free. Buyer pays this amount in SOL when purchasing.</span>
+                </div>
                 <p class="blind-info" style="margin-top:4px">
-                    Blind Mode: Private keys are encrypted with Lit Protocol and uploaded to the Solana devnet marketplace.
-                    You will NOT see the private key - only buyers who meet access conditions can decrypt it.
+                    Blind Mode: Keys are uploaded to the Solana devnet marketplace with an NFT.
+                    Buyers pay the listed price in SOL to your wallet, then burn the NFT to receive the key.
                 </p>
             </div>
         </div>
@@ -153,6 +158,23 @@
             <div class="result-row">
                 <label>Saved To:</label>
                 <input type="text" id="savedTo" readonly placeholder="Burn an NFT to decrypt - key will be saved to decrypted_keys/">
+            </div>
+        </div>
+
+        <div class="group-box" style="margin-top:10px">
+            <div class="group-box-title">Bounty Board</div>
+            <p class="marketplace-info">Post a bounty for a specific vanity word. Miners can see your request and fulfill it.</p>
+            <div class="inline-row" style="margin-bottom:8px">
+                <input type="text" id="bountyWord" placeholder="Word you want (e.g. dragon)" style="width:160px">
+                <input type="number" id="bountyReward" placeholder="Reward SOL" value="0.5" min="0.01" step="0.01" style="width:110px">
+                <input type="text" id="bountyAddress" placeholder="Your wallet address (public key)" style="flex:1">
+                <button class="btn btn-search" onclick="postBounty()">Post Bounty</button>
+            </div>
+            <div class="table-container" style="max-height:200px">
+                <table>
+                    <thead><tr><th>Word</th><th>Reward</th><th>Buyer</th><th>Status</th><th>Notes</th><th>Action</th></tr></thead>
+                    <tbody id="bountiesTable"></tbody>
+                </table>
             </div>
         </div>
 
@@ -292,6 +314,7 @@ function startMining() {
         max_temp: parseInt(document.getElementById('maxTemp').value) || 80,
         mining_mode: miningMode,
         blind_wallet: document.getElementById('sellerWallet').value.trim(),
+        blind_price_sol: parseFloat(document.getElementById('blindPrice').value) || 0,
     };
 
     document.getElementById('foundTable').innerHTML = '';
@@ -547,7 +570,9 @@ function selectPackage(idx) {
         buyBtn.textContent = `SOLD - ...${suffix} already burned`;
         buyBtn.disabled = true;
     } else {
-        buyBtn.textContent = `Burn & Decrypt ...${suffix} - ${price}`;
+        const priceLam = (pkg.encrypted_json || {}).priceLamports || 0;
+        const priceDisplay = priceLam > 0 ? (priceLam / 1e9).toFixed(4) + ' SOL' : 'Free';
+        buyBtn.textContent = `Buy & Burn ...${suffix} — ${priceDisplay}`;
         buyBtn.disabled = false;
     }
 }
@@ -621,7 +646,75 @@ function buyAndBurn() {
     });
 }
 
+function loadBounties() {
+    fetch('/api/bounties')
+    .then(r => r.json())
+    .then(d => {
+        const tbody = document.getElementById('bountiesTable');
+        tbody.innerHTML = '';
+        if (!d.bounties || d.bounties.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888">No bounties posted yet</td></tr>';
+            return;
+        }
+        d.bounties.forEach(b => {
+            const tr = document.createElement('tr');
+            const reward = (b.reward_sol || 0).toFixed(4) + ' SOL';
+            const buyer = b.buyer_address ? (b.buyer_address.substring(0,8) + '...') : '-';
+            const statusCls = b.status === 'fulfilled' ? 'status-burned' : 'status-active';
+            const notes = b.notes || '';
+            const action = b.status === 'open'
+                ? `<button class="btn btn-secondary" style="padding:2px 8px;font-size:11px" onclick="deleteBounty(${b.id})">Cancel</button>`
+                : '-';
+            tr.innerHTML = `<td>${esc(b.word)}</td><td class="price-cell">${esc(reward)}</td><td>${esc(buyer)}</td><td class="${statusCls}">${esc(b.status)}</td><td>${esc(notes)}</td><td>${action}</td>`;
+            tbody.appendChild(tr);
+        });
+    })
+    .catch(() => {});
+}
+
+function postBounty() {
+    const word = document.getElementById('bountyWord').value.trim();
+    const reward = parseFloat(document.getElementById('bountyReward').value) || 0;
+    const buyer = document.getElementById('bountyAddress').value.trim();
+
+    if (!word) { appendLog('mpLog', 'Bounty error: Enter a word'); return; }
+    if (reward <= 0) { appendLog('mpLog', 'Bounty error: Reward must be > 0'); return; }
+    if (!buyer) { appendLog('mpLog', 'Bounty error: Enter your wallet address'); return; }
+
+    fetch('/api/bounties', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ word, reward_sol: reward, buyer_address: buyer })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            appendLog('mpLog', 'Bounty error: ' + d.error);
+        } else {
+            appendLog('mpLog', `Bounty posted: "${word}" for ${reward} SOL`);
+            document.getElementById('bountyWord').value = '';
+            loadBounties();
+        }
+    })
+    .catch(e => appendLog('mpLog', 'Bounty post failed: ' + e));
+}
+
+function deleteBounty(id) {
+    fetch('/api/bounties/' + id, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            appendLog('mpLog', 'Cancel bounty error: ' + d.error);
+        } else {
+            appendLog('mpLog', 'Bounty cancelled');
+            loadBounties();
+        }
+    })
+    .catch(e => appendLog('mpLog', 'Cancel failed: ' + e));
+}
+
 loadWordCount();
+loadBounties();
 connectSSE();
 
 fetch('/api/status')
