@@ -1347,6 +1347,7 @@ class MainWindow(QMainWindow):
                     encrypted_json=encrypted_json,
                 )
                 result["mint_address"] = mint_address
+                result["vanity_word"] = vanity_word
 
                 QTimer.singleShot(0, lambda: self._on_upload_success(result, pubkey))
             except Exception as e:
@@ -1360,16 +1361,23 @@ class MainWindow(QMainWindow):
         pda = result.get("pda", "")
         url = result.get("explorer_url", "")
         mint = result.get("mint_address", "")
-        self._on_log(f"[Blind] Uploaded {pubkey[:20]}... -> PDA: {pda[:20]}...")
-        self._mp_log(f"Uploaded {pubkey} -> PDA: {pda}")
+        vanity_word = result.get("vanity_word", "")
+        nft_url = f"https://explorer.solana.com/address/{mint}?cluster=devnet" if mint else ""
+        self._on_log(f"[Blind] SUCCESS: {pubkey[:20]}... uploaded to marketplace")
+        self._mp_log(f"SUCCESS: Uploaded {pubkey}")
         self._mp_log(f"  NFT Mint: {mint}")
+        self._mp_log(f"  PDA: {pda}")
         self._mp_log(f"  TX: {sig}")
         self._mp_log(f"  Explorer: {url}")
+        if nft_url:
+            self._mp_log(f"  NFT Explorer: {nft_url}")
+        if vanity_word:
+            self._mp_log(f"  Word: {vanity_word}")
         self.upload_status_label.setText(f"Last upload: {pubkey[:12]}... (NFT: {mint[:12]}...)")
 
     def _on_upload_error(self, err, pubkey):
-        self._on_log(f"[Blind] Upload failed for {pubkey[:20]}...: {err[:60]}")
-        self._mp_log(f"Upload failed for {pubkey}: {err}")
+        self._on_log(f"[Blind] FAILED: Upload for {pubkey[:20]}...: {err[:60]}")
+        self._mp_log(f"FAILED: Upload for {pubkey}: {err}")
 
     def _load_word_count(self):
         self._word_count_timer.start(400)

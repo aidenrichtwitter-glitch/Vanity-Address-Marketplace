@@ -233,11 +233,23 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
                 vanity_pubkey=vanity_pubkey,
                 encrypted_json=encrypted_json,
             )
-            broadcast_event("log", {"msg": f"[Blind] Uploaded {pubkey[:20]}..."})
-            broadcast_event("mp_log", {"msg": f"Uploaded {pubkey} -> PDA: {result.get('pda', '')}"})
+            sig = result.get("signature", "")
+            pda = result.get("pda", "")
+            explorer_url = result.get("explorer_url", "")
+            nft_url = f"https://explorer.solana.com/address/{mint_address}?cluster=devnet" if mint_address else ""
+            broadcast_event("log", {"msg": f"[Blind] SUCCESS: {pubkey[:20]}... uploaded to marketplace"})
+            broadcast_event("mp_log", {"msg": f"SUCCESS: Uploaded {pubkey}"})
+            broadcast_event("mp_log", {"msg": f"  NFT Mint: {mint_address}"})
+            broadcast_event("mp_log", {"msg": f"  PDA: {pda}"})
+            broadcast_event("mp_log", {"msg": f"  TX: {sig}"})
+            broadcast_event("mp_log", {"msg": f"  Explorer: {explorer_url}"})
+            if nft_url:
+                broadcast_event("mp_log", {"msg": f"  NFT Explorer: {nft_url}"})
+            if vanity_word:
+                broadcast_event("mp_log", {"msg": f"  Word: {vanity_word}"})
         except Exception as e:
-            broadcast_event("log", {"msg": f"[Blind] Upload failed: {str(e)[:60]}"})
-            broadcast_event("mp_log", {"msg": f"Upload failed for {pubkey}: {e}"})
+            broadcast_event("log", {"msg": f"[Blind] FAILED: {str(e)[:60]}"})
+            broadcast_event("mp_log", {"msg": f"FAILED: Upload for {pubkey}: {e}"})
             broadcast_event("error", {"msg": f"Blind upload failed for {pubkey[:20]}...: {str(e)[:80]}"})
 
     t = threading.Thread(target=_upload, daemon=True)
