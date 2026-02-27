@@ -856,40 +856,52 @@ class MainWindow(QMainWindow):
         search_row.addStretch()
         buyer_layout.addLayout(search_row)
 
-        self.packages_table = QTableWidget(0, 3)
-        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "PDA", "Data Size"])
+        self.packages_table = QTableWidget(0, 4)
+        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "PDA", "Price", "Suffix"])
         self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.packages_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.packages_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.packages_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.packages_table.setAlternatingRowColors(True)
         self.packages_table.verticalHeader().setVisible(False)
+        self.packages_table.selectionModel().selectionChanged.connect(self._on_package_selected)
         buyer_layout.addWidget(self.packages_table)
 
-        decrypt_row = QHBoxLayout()
-        decrypt_row.setSpacing(8)
-        self.decrypt_btn = QPushButton("Decrypt Selected")
-        self.decrypt_btn.setObjectName("startBtn")
-        self.decrypt_btn.setFixedWidth(160)
-        self.decrypt_btn.clicked.connect(self._decrypt_selected)
-        decrypt_row.addWidget(self.decrypt_btn)
+        buy_row = QHBoxLayout()
+        buy_row.setSpacing(8)
+        self.buy_btn = QPushButton("Buy — Select a package")
+        self.buy_btn.setFixedHeight(40)
+        self.buy_btn.setMinimumWidth(220)
+        self.buy_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a6e2a; border: 2px solid #50e050;
+                border-radius: 6px; color: #e0ffe0; font-weight: bold;
+                font-size: 14px; padding: 8px 20px;
+            }
+            QPushButton:hover { background-color: #3a8e3a; }
+            QPushButton:disabled { background-color: #2a2a4a; border-color: #4a4a6e; color: #6666aa; font-size: 12px; }
+        """)
+        self.buy_btn.setEnabled(False)
+        self.buy_btn.clicked.connect(self._decrypt_selected)
+        buy_row.addWidget(self.buy_btn)
 
         self.decrypt_status_label = QLabel("")
         self.decrypt_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
-        decrypt_row.addWidget(self.decrypt_status_label)
-        decrypt_row.addStretch()
-        buyer_layout.addLayout(decrypt_row)
+        buy_row.addWidget(self.decrypt_status_label)
+        buy_row.addStretch()
+        buyer_layout.addLayout(buy_row)
 
         result_row = QHBoxLayout()
         result_row.setSpacing(8)
-        result_lbl = QLabel("Decrypted Key:")
+        result_lbl = QLabel("Private Key:")
         result_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
-        result_lbl.setFixedWidth(100)
+        result_lbl.setFixedWidth(80)
         result_row.addWidget(result_lbl)
         self.decrypted_key_edit = QLineEdit()
         self.decrypted_key_edit.setReadOnly(True)
-        self.decrypted_key_edit.setPlaceholderText("Decrypted private key will appear here")
+        self.decrypted_key_edit.setPlaceholderText("Purchase a package to reveal the private key")
         result_row.addWidget(self.decrypted_key_edit)
         buyer_layout.addLayout(result_row)
 
@@ -963,6 +975,39 @@ class MainWindow(QMainWindow):
         else:
             self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
 
+    def _get_package_price(self, pkg):
+        enc_json = pkg.get("encrypted_json", {})
+        conditions = enc_json.get("accessControlConditions", [])
+        for cond in conditions:
+            rvt = cond.get("returnValueTest", {})
+            val = rvt.get("value", "")
+            if val:
+                try:
+                    lamports = int(val)
+                    sol = lamports / 1_000_000_000
+                    if sol >= 1:
+                        return f"{sol:.2f} SOL"
+                    return f"{sol:.4f} SOL"
+                except ValueError:
+                    pass
+        return "Free"
+
+    def _on_package_selected(self, selected, deselected):
+        indexes = self.packages_table.selectionModel().selectedRows()
+        if not indexes:
+            self.buy_btn.setText("Buy — Select a package")
+            self.buy_btn.setEnabled(False)
+            return
+
+        row = indexes[0].row()
+        if row < len(self._packages_data):
+            pkg = self._packages_data[row]
+            price = self._get_package_price(pkg)
+            addr = pkg.get("vanity_address", "")
+            suffix = addr[-6:] if len(addr) >= 6 else addr
+            self.buy_btn.setText(f"Buy ...{suffix} — {price}")
+            self.buy_btn.setEnabled(True)
+
     def _mp_log(self, msg):
         self.mp_log_text.append(msg)
 
@@ -1010,11 +1055,15 @@ class MainWindow(QMainWindow):
             self.packages_status_label.setText(f"Found {len(filtered)} package(s)")
             self._mp_log(f"Search complete: {len(filtered)} packages found")
 
+        self.buy_btn.setText("Buy — Select a package")
+        self.buy_btn.setEnabled(False)
+
         for pkg in filtered:
             row = self.packages_table.rowCount()
             self.packages_table.insertRow(row)
 
-            addr_item = QTableWidgetItem(pkg.get("vanity_address", "unknown"))
+            addr = pkg.get("vanity_address", "unknown")
+            addr_item = QTableWidgetItem(addr)
             addr_item.setForeground(QColor(100, 230, 120))
             self.packages_table.setItem(row, 0, addr_item)
 
@@ -1022,10 +1071,15 @@ class MainWindow(QMainWindow):
             pda_item.setForeground(QColor(160, 170, 240))
             self.packages_table.setItem(row, 1, pda_item)
 
-            enc_json = pkg.get("encrypted_json", {})
-            size = len(str(enc_json))
-            size_item = QTableWidgetItem(f"{size} bytes")
-            self.packages_table.setItem(row, 2, size_item)
+            price = self._get_package_price(pkg)
+            price_item = QTableWidgetItem(price)
+            price_item.setForeground(QColor(250, 210, 70))
+            self.packages_table.setItem(row, 2, price_item)
+
+            suffix = addr[-8:] if len(addr) >= 8 else addr
+            suffix_item = QTableWidgetItem(suffix)
+            suffix_item.setForeground(QColor(230, 140, 230))
+            self.packages_table.setItem(row, 3, suffix_item)
 
     def _on_browse_error(self, err):
         self.browse_packages_btn.setEnabled(True)
@@ -1049,8 +1103,10 @@ class MainWindow(QMainWindow):
             self.decrypt_status_label.setText("No encrypted data in this package")
             return
 
-        self.decrypt_status_label.setText("Decrypting with Lit Protocol...")
-        self.decrypt_btn.setEnabled(False)
+        price = self._get_package_price(pkg)
+        addr = pkg.get("vanity_address", "")
+        self.decrypt_status_label.setText(f"Purchasing ...{addr[-6:]} for {price}...")
+        self.buy_btn.setEnabled(False)
 
         def _do_decrypt():
             try:
@@ -1064,17 +1120,17 @@ class MainWindow(QMainWindow):
         t.start()
 
     def _on_decrypt_success(self, privkey, vanity_address):
-        self.decrypt_btn.setEnabled(True)
-        self.decrypt_status_label.setText("Decryption successful!")
+        self.buy_btn.setEnabled(True)
+        self.decrypt_status_label.setText("Purchase complete — key revealed!")
         self.decrypt_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
         self.decrypted_key_edit.setText(privkey)
-        self._mp_log(f"Decrypted key for vanity address: {vanity_address}")
+        self._mp_log(f"Purchased vanity address: {vanity_address}")
 
     def _on_decrypt_error(self, err):
-        self.decrypt_btn.setEnabled(True)
-        self.decrypt_status_label.setText(f"Decrypt failed: {err[:50]}")
+        self.buy_btn.setEnabled(True)
+        self.decrypt_status_label.setText(f"Purchase failed: {err[:50]}")
         self.decrypt_status_label.setStyleSheet("color: #ff5050; font-size: 11px; background: transparent;")
-        self._mp_log(f"Decryption error: {err}")
+        self._mp_log(f"Purchase error: {err}")
 
     def _on_found_with_key(self, pubkey: str, pv_bytes: bytes):
         if self._mining_mode != "blind":
