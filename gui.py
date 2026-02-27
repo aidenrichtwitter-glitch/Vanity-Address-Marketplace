@@ -812,18 +812,39 @@ class MainWindow(QMainWindow):
         root.setContentsMargins(10, 10, 10, 10)
 
         info_lbl = QLabel(
-            "Browse vanity key packages uploaded by sellers in Blind Mode. "
-            "Select a package and decrypt to reveal the private key using Lit Protocol."
+            "Browse vanity key NFTs. Buy & Burn an NFT to decrypt the private key. "
+            "Hold an NFT to resell it — burning is permanent and saves the key locally."
         )
         info_lbl.setWordWrap(True)
         info_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; padding: 4px 0;")
         root.addWidget(info_lbl)
 
+        wallet_box = QGroupBox("Buyer Wallet")
+        wallet_layout = QHBoxLayout(wallet_box)
+        wallet_layout.setSpacing(8)
+        wallet_lbl = QLabel("Private Key:")
+        wallet_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        wallet_lbl.setFixedWidth(75)
+        wallet_layout.addWidget(wallet_lbl)
+        self.buyer_wallet_edit = QLineEdit()
+        self.buyer_wallet_edit.setEchoMode(QLineEdit.Password)
+        self.buyer_wallet_edit.setPlaceholderText("Base58 private key (needed to burn NFT and decrypt)")
+        wallet_layout.addWidget(self.buyer_wallet_edit)
+        self.buyer_wallet_show_btn = QPushButton("Show")
+        self.buyer_wallet_show_btn.setFixedWidth(50)
+        self.buyer_wallet_show_btn.clicked.connect(self._toggle_buyer_wallet_vis)
+        wallet_layout.addWidget(self.buyer_wallet_show_btn)
+        buyer_load_btn = QPushButton("Load Key File")
+        buyer_load_btn.setFixedWidth(100)
+        buyer_load_btn.clicked.connect(self._load_buyer_key_file)
+        wallet_layout.addWidget(buyer_load_btn)
+        root.addWidget(wallet_box)
+
         self.upload_status_label = QLabel("")
         self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
         root.addWidget(self.upload_status_label)
 
-        buyer_box = QGroupBox("Search & Decrypt Packages")
+        buyer_box = QGroupBox("NFT Marketplace")
         buyer_layout = QVBoxLayout(buyer_box)
         buyer_layout.setSpacing(8)
 
@@ -857,7 +878,7 @@ class MainWindow(QMainWindow):
         buyer_layout.addLayout(search_row)
 
         self.packages_table = QTableWidget(0, 4)
-        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "PDA", "Price", "Suffix"])
+        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "NFT Mint", "Price", "Status"])
         self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
@@ -871,20 +892,20 @@ class MainWindow(QMainWindow):
 
         buy_row = QHBoxLayout()
         buy_row.setSpacing(8)
-        self.buy_btn = QPushButton("Buy — Select a package")
+        self.buy_btn = QPushButton("Buy & Burn — Select a package")
         self.buy_btn.setFixedHeight(40)
-        self.buy_btn.setMinimumWidth(220)
+        self.buy_btn.setMinimumWidth(260)
         self.buy_btn.setStyleSheet("""
             QPushButton {
-                background-color: #2a6e2a; border: 2px solid #50e050;
-                border-radius: 6px; color: #e0ffe0; font-weight: bold;
+                background-color: #8e2a2a; border: 2px solid #ff5050;
+                border-radius: 6px; color: #ffe0e0; font-weight: bold;
                 font-size: 14px; padding: 8px 20px;
             }
-            QPushButton:hover { background-color: #3a8e3a; }
+            QPushButton:hover { background-color: #ae3a3a; }
             QPushButton:disabled { background-color: #2a2a4a; border-color: #4a4a6e; color: #6666aa; font-size: 12px; }
         """)
         self.buy_btn.setEnabled(False)
-        self.buy_btn.clicked.connect(self._decrypt_selected)
+        self.buy_btn.clicked.connect(self._buy_and_burn)
         buy_row.addWidget(self.buy_btn)
 
         self.decrypt_status_label = QLabel("")
@@ -895,13 +916,13 @@ class MainWindow(QMainWindow):
 
         result_row = QHBoxLayout()
         result_row.setSpacing(8)
-        result_lbl = QLabel("Private Key:")
+        result_lbl = QLabel("Saved To:")
         result_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
-        result_lbl.setFixedWidth(80)
+        result_lbl.setFixedWidth(65)
         result_row.addWidget(result_lbl)
         self.decrypted_key_edit = QLineEdit()
         self.decrypted_key_edit.setReadOnly(True)
-        self.decrypted_key_edit.setPlaceholderText("Purchase a package to reveal the private key")
+        self.decrypted_key_edit.setPlaceholderText("Burn an NFT to decrypt — key will be saved to decrypted_keys/")
         result_row.addWidget(self.decrypted_key_edit)
         buyer_layout.addLayout(result_row)
 
@@ -992,10 +1013,26 @@ class MainWindow(QMainWindow):
                     pass
         return "Free"
 
+    def _toggle_buyer_wallet_vis(self):
+        if self.buyer_wallet_edit.echoMode() == QLineEdit.Password:
+            self.buyer_wallet_edit.setEchoMode(QLineEdit.Normal)
+        else:
+            self.buyer_wallet_edit.setEchoMode(QLineEdit.Password)
+
+    def _load_buyer_key_file(self):
+        f, _ = QFileDialog.getOpenFileName(self, "Load Buyer Key File", "", "All Files (*)")
+        if f:
+            try:
+                text = Path(f).read_text().strip()
+                self.buyer_wallet_edit.setText(text)
+                self._mp_log(f"Loaded buyer key from {f}")
+            except Exception as e:
+                self._mp_log(f"Failed to load buyer key: {e}")
+
     def _on_package_selected(self, selected, deselected):
         indexes = self.packages_table.selectionModel().selectedRows()
         if not indexes:
-            self.buy_btn.setText("Buy — Select a package")
+            self.buy_btn.setText("Buy & Burn — Select a package")
             self.buy_btn.setEnabled(False)
             return
 
@@ -1005,21 +1042,39 @@ class MainWindow(QMainWindow):
             price = self._get_package_price(pkg)
             addr = pkg.get("vanity_address", "")
             suffix = addr[-6:] if len(addr) >= 6 else addr
-            self.buy_btn.setText(f"Buy ...{suffix} — {price}")
-            self.buy_btn.setEnabled(True)
+            nft_status = pkg.get("nft_status", "unknown")
+            if nft_status == "BURNED":
+                self.buy_btn.setText(f"SOLD — ...{suffix} already burned")
+                self.buy_btn.setEnabled(False)
+            else:
+                self.buy_btn.setText(f"Burn & Decrypt ...{suffix} — {price}")
+                self.buy_btn.setEnabled(True)
 
     def _mp_log(self, msg):
         self.mp_log_text.append(msg)
 
     def _browse_packages(self):
-        self.packages_status_label.setText("Searching devnet for packages...")
+        self.packages_status_label.setText("Searching devnet for packages + checking NFT status...")
         self.browse_packages_btn.setEnabled(False)
         search_filter = self.search_filter_edit.text().strip().lower()
 
         def _fetch():
             try:
                 from core.marketplace.solana_client import fetch_all_packages
+                from core.marketplace.nft import check_nft_supply
                 packages = fetch_all_packages()
+
+                for pkg in packages:
+                    mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
+                    if mint_addr:
+                        try:
+                            supply = check_nft_supply(mint_addr)
+                            pkg["nft_status"] = "ACTIVE" if supply > 0 else "BURNED"
+                        except Exception:
+                            pkg["nft_status"] = "unknown"
+                    else:
+                        pkg["nft_status"] = "no NFT"
+
                 QTimer.singleShot(0, lambda: self._populate_packages(packages, search_filter))
             except Exception as e:
                 QTimer.singleShot(0, lambda: self._on_browse_error(str(e)))
@@ -1055,7 +1110,7 @@ class MainWindow(QMainWindow):
             self.packages_status_label.setText(f"Found {len(filtered)} package(s)")
             self._mp_log(f"Search complete: {len(filtered)} packages found")
 
-        self.buy_btn.setText("Buy — Select a package")
+        self.buy_btn.setText("Buy & Burn — Select a package")
         self.buy_btn.setEnabled(False)
 
         for pkg in filtered:
@@ -1067,26 +1122,32 @@ class MainWindow(QMainWindow):
             addr_item.setForeground(QColor(100, 230, 120))
             self.packages_table.setItem(row, 0, addr_item)
 
-            pda_item = QTableWidgetItem(pkg.get("pda", ""))
-            pda_item.setForeground(QColor(160, 170, 240))
-            self.packages_table.setItem(row, 1, pda_item)
+            mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "—")
+            mint_item = QTableWidgetItem(mint_addr)
+            mint_item.setForeground(QColor(160, 170, 240))
+            self.packages_table.setItem(row, 1, mint_item)
 
             price = self._get_package_price(pkg)
             price_item = QTableWidgetItem(price)
             price_item.setForeground(QColor(250, 210, 70))
             self.packages_table.setItem(row, 2, price_item)
 
-            suffix = addr[-8:] if len(addr) >= 8 else addr
-            suffix_item = QTableWidgetItem(suffix)
-            suffix_item.setForeground(QColor(230, 140, 230))
-            self.packages_table.setItem(row, 3, suffix_item)
+            nft_status = pkg.get("nft_status", "unknown")
+            status_item = QTableWidgetItem(nft_status)
+            if nft_status == "ACTIVE":
+                status_item.setForeground(QColor(100, 230, 120))
+            elif nft_status == "BURNED":
+                status_item.setForeground(QColor(255, 80, 80))
+            else:
+                status_item.setForeground(QColor(150, 150, 180))
+            self.packages_table.setItem(row, 3, status_item)
 
     def _on_browse_error(self, err):
         self.browse_packages_btn.setEnabled(True)
         self.packages_status_label.setText(f"Search error: {err[:60]}")
         self._mp_log(f"Search error: {err}")
 
-    def _decrypt_selected(self):
+    def _buy_and_burn(self):
         selected = self.packages_table.selectedItems()
         if not selected:
             self.decrypt_status_label.setText("Select a package first")
@@ -1103,34 +1164,105 @@ class MainWindow(QMainWindow):
             self.decrypt_status_label.setText("No encrypted data in this package")
             return
 
-        price = self._get_package_price(pkg)
+        mint_address = encrypted_json.get("mintAddress", "")
+        if not mint_address:
+            self.decrypt_status_label.setText("This package has no NFT — cannot burn")
+            return
+
+        buyer_key = self.buyer_wallet_edit.text().strip()
+        if not buyer_key:
+            self.decrypt_status_label.setText("Enter your buyer wallet private key first")
+            return
+
         addr = pkg.get("vanity_address", "")
-        self.decrypt_status_label.setText(f"Purchasing ...{addr[-6:]} for {price}...")
+        suffix = addr[-6:] if len(addr) >= 6 else addr
+        self.decrypt_status_label.setText(f"Burning NFT for ...{suffix}...")
+        self.decrypt_status_label.setStyleSheet("color: #ffaa30; font-size: 11px; font-weight: bold; background: transparent;")
         self.buy_btn.setEnabled(False)
 
-        def _do_decrypt():
+        def _do_burn_and_decrypt():
             try:
+                from core.marketplace.solana_client import load_seller_keypair
+                from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
                 from core.marketplace.lit_encrypt import decrypt_private_key
-                result = decrypt_private_key(encrypted_json)
-                QTimer.singleShot(0, lambda: self._on_decrypt_success(result, pkg.get("vanity_address", "")))
-            except Exception as e:
-                QTimer.singleShot(0, lambda: self._on_decrypt_error(str(e)))
 
-        t = threading.Thread(target=_do_decrypt, daemon=True)
+                supply = check_nft_supply(mint_address)
+                if supply == 0:
+                    QTimer.singleShot(0, lambda: self._on_burn_error("NFT already burned — this key was already sold"))
+                    return
+
+                buyer_kp = load_seller_keypair(buyer_key)
+
+                balance = check_token_balance(buyer_kp.pubkey(), mint_address)
+                if balance == 0:
+                    seller_addr = encrypted_json.get("sellerAddress", "")
+                    if seller_addr:
+                        QTimer.singleShot(0, lambda: self._on_burn_status("Transferring NFT to buyer wallet..."))
+                        seller_key_env = self.seller_wallet_edit.text().strip() if hasattr(self, 'seller_wallet_edit') else ""
+                        if not seller_key_env:
+                            import os
+                            seller_key_env = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+                        if seller_key_env:
+                            seller_kp = load_seller_keypair(seller_key_env)
+                            transfer_nft(seller_kp, buyer_kp.pubkey(), mint_address)
+                        else:
+                            QTimer.singleShot(0, lambda: self._on_burn_error("You don't own this NFT. Transfer it to your wallet first."))
+                            return
+
+                QTimer.singleShot(0, lambda: self._on_burn_status("Burning NFT on-chain..."))
+                burn_sig = burn_nft(buyer_kp, mint_address)
+
+                QTimer.singleShot(0, lambda: self._on_burn_status("NFT burned! Decrypting private key..."))
+                privkey = decrypt_private_key(encrypted_json)
+
+                out_dir = Path("decrypted_keys")
+                out_dir.mkdir(exist_ok=True)
+                vanity = pkg.get("vanity_address", "unknown")
+                out_file = out_dir / f"{vanity}.txt"
+                out_file.write_text(
+                    f"Vanity Address: {vanity}\n"
+                    f"Private Key: {privkey}\n"
+                    f"NFT Mint: {mint_address}\n"
+                    f"Burn TX: {burn_sig}\n",
+                    encoding="utf-8",
+                )
+
+                QTimer.singleShot(0, lambda: self._on_burn_success(str(out_file), vanity, burn_sig))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._on_burn_error(str(e)))
+
+        t = threading.Thread(target=_do_burn_and_decrypt, daemon=True)
         t.start()
 
-    def _on_decrypt_success(self, privkey, vanity_address):
-        self.buy_btn.setEnabled(True)
-        self.decrypt_status_label.setText("Purchase complete — key revealed!")
-        self.decrypt_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
-        self.decrypted_key_edit.setText(privkey)
-        self._mp_log(f"Purchased vanity address: {vanity_address}")
+    def _on_burn_status(self, msg):
+        self.decrypt_status_label.setText(msg)
+        self._mp_log(msg)
 
-    def _on_decrypt_error(self, err):
+    def _on_burn_success(self, filepath, vanity_address, burn_sig):
         self.buy_btn.setEnabled(True)
-        self.decrypt_status_label.setText(f"Purchase failed: {err[:50]}")
+        self.decrypt_status_label.setText("NFT burned — key decrypted and saved!")
+        self.decrypt_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
+        self.decrypted_key_edit.setText(filepath)
+        self._mp_log(f"Burned NFT and decrypted key for: {vanity_address}")
+        self._mp_log(f"  Burn TX: {burn_sig}")
+        self._mp_log(f"  Key saved to: {filepath}")
+
+        indexes = self.packages_table.selectionModel().selectedRows()
+        if indexes:
+            row = indexes[0].row()
+            if row < len(self._packages_data):
+                self._packages_data[row]["nft_status"] = "BURNED"
+                status_item = QTableWidgetItem("BURNED")
+                status_item.setForeground(QColor(255, 80, 80))
+                self.packages_table.setItem(row, 3, status_item)
+                self.buy_btn.setText(f"SOLD — already burned")
+                self.buy_btn.setEnabled(False)
+
+    def _on_burn_error(self, err):
+        self.buy_btn.setEnabled(True)
+        self.decrypt_status_label.setText(f"Burn failed: {err[:60]}")
         self.decrypt_status_label.setStyleSheet("color: #ff5050; font-size: 11px; background: transparent;")
-        self._mp_log(f"Purchase error: {err}")
+        self._mp_log(f"Burn error: {err}")
 
     def _on_found_with_key(self, pubkey: str, pv_bytes: bytes):
         if self._mining_mode != "blind":
@@ -1140,8 +1272,8 @@ class MainWindow(QMainWindow):
         if not wallet:
             return
 
-        self._on_log(f"[Blind] Encrypting and uploading key for {pubkey}...")
-        self._mp_log(f"Encrypting and uploading key for {pubkey}...")
+        self._on_log(f"[Blind] Minting NFT + encrypting key for {pubkey}...")
+        self._mp_log(f"Minting NFT and encrypting key for {pubkey}...")
 
         def _upload():
             try:
@@ -1149,7 +1281,13 @@ class MainWindow(QMainWindow):
                 from nacl.signing import SigningKey
                 from core.marketplace.solana_client import load_seller_keypair, upload_package
                 from core.marketplace.lit_encrypt import encrypt_private_key
+                from core.marketplace.nft import mint_nft
                 from solders.pubkey import Pubkey
+
+                seller_kp = load_seller_keypair(wallet)
+
+                mint_address = mint_nft(seller_kp)
+                QTimer.singleShot(0, lambda: self._on_log(f"[Blind] NFT minted: {mint_address[:20]}..."))
 
                 sk = SigningKey(pv_bytes)
                 pb_bytes = bytes(sk.verify_key)
@@ -1160,7 +1298,9 @@ class MainWindow(QMainWindow):
                     vanity_address=pubkey,
                 )
 
-                seller_kp = load_seller_keypair(wallet)
+                encrypted_json["mintAddress"] = mint_address
+                encrypted_json["sellerAddress"] = str(seller_kp.pubkey())
+
                 vanity_pubkey = Pubkey.from_string(pubkey)
 
                 result = upload_package(
@@ -1168,6 +1308,7 @@ class MainWindow(QMainWindow):
                     vanity_pubkey=vanity_pubkey,
                     encrypted_json=encrypted_json,
                 )
+                result["mint_address"] = mint_address
 
                 QTimer.singleShot(0, lambda: self._on_upload_success(result, pubkey))
             except Exception as e:
@@ -1180,11 +1321,13 @@ class MainWindow(QMainWindow):
         sig = result.get("signature", "")
         pda = result.get("pda", "")
         url = result.get("explorer_url", "")
+        mint = result.get("mint_address", "")
         self._on_log(f"[Blind] Uploaded {pubkey[:20]}... -> PDA: {pda[:20]}...")
         self._mp_log(f"Uploaded {pubkey} -> PDA: {pda}")
+        self._mp_log(f"  NFT Mint: {mint}")
         self._mp_log(f"  TX: {sig}")
         self._mp_log(f"  Explorer: {url}")
-        self.upload_status_label.setText(f"Last upload: {pubkey[:12]}...")
+        self.upload_status_label.setText(f"Last upload: {pubkey[:12]}... (NFT: {mint[:12]}...)")
 
     def _on_upload_error(self, err, pubkey):
         self._on_log(f"[Blind] Upload failed for {pubkey[:20]}...: {err[:60]}")

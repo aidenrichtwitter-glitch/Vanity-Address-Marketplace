@@ -1,7 +1,7 @@
 # SolVanity Word Miner (SolVanityCL Fork)
 
 ## Overview
-A desktop GUI application (PySide6/Qt) that mines Solana vanity addresses using GPU (OpenCL), filtering for addresses whose last characters match dictionary words with optional "X" padding. Includes a blind vanity key marketplace where mined keys are encrypted with Lit Protocol and uploaded to Solana devnet PDAs for purchase/decryption by buyers.
+A desktop GUI application (PySide6/Qt) that mines Solana vanity addresses using GPU (OpenCL), filtering for addresses whose last characters match dictionary words with optional "X" padding. Includes a blind vanity key marketplace with NFT-based burn-to-decrypt mechanics — mined keys are encrypted with Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers burn the NFT to decrypt and save the private key locally.
 
 Examples of vanity addresses:
 - `...XXomen` (XX padding + 4-letter word)
@@ -36,6 +36,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
   - `config.py` - On-chain program constants (program ID, PDA seed, discriminator, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
   - `lit_encrypt.py` - Lit Protocol encryption/decryption wrapper for private keys
+  - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
 ## Mining Modes
 The Word Miner tab has a mode toggle:
@@ -47,18 +48,34 @@ The Word Miner tab has a mode toggle:
 
 ### Blind Mode
 - Found vanity keys are encrypted with Lit Protocol (datil network) and uploaded to a Solana devnet PDA
+- An NFT (SPL token, supply=1) is minted alongside each upload to enable burn-to-decrypt
+- The encrypted JSON includes mintAddress and sellerAddress fields
 - The private key is NEVER saved locally or shown to the user
 - Requires a seller wallet (base58 private key) configured in the inline wallet input
-- Only buyers who meet the solRpc getBalance access conditions can decrypt
+- Only buyers who burn the NFT can decrypt the key
 
-## Marketplace Feature
-The Marketplace tab enables buying/decrypting blind vanity keys:
+## NFT Burn-to-Decrypt Marketplace
+The Marketplace tab enables an NFT-based vanity key marketplace:
+
+### How It Works
+1. **Seller (Blind Mode)**: Mines a vanity key → mints an NFT → encrypts key with Lit Protocol → uploads encrypted data + NFT mint address to PDA
+2. **Buyer**: Browses marketplace → selects a package → burns the NFT → key is decrypted and saved locally
+3. **Resale**: NFTs can be transferred between wallets before burning. Once burned, the key is revealed and cannot be re-sold.
 
 ### Buyer Flow
-1. Click "Browse Packages" to fetch all uploaded PDAs from the on-chain program
-2. Select a package to see the vanity address
-3. Click "Decrypt Selected" to decrypt using Lit Protocol
-4. The decrypted private key is displayed for import into Phantom/Solflare
+1. Enter buyer wallet (private key) in the Buyer Wallet section
+2. Click "Search Packages" to fetch all uploaded PDAs from devnet
+3. Packages show: vanity address, NFT mint, price, status (ACTIVE/BURNED)
+4. Select an ACTIVE package and click "Burn & Decrypt"
+5. The app: transfers NFT to buyer → burns NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/` folder
+6. Burned packages show as "SOLD" and cannot be re-purchased
+
+### Saved Keys
+Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
+- Vanity address
+- Private key (Base58)
+- NFT mint address
+- Burn transaction signature
 
 ### On-Chain Program
 - Program ID: `EHS97x7xVo4svEVrEsVnihXgPLozCFs1BH7Bnkuf2nP6` (deployed on devnet)
@@ -66,8 +83,14 @@ The Marketplace tab enables buying/decrypting blind vanity keys:
 - Discriminator: `[165, 105, 103, 168, 229, 214, 177, 251]`
 - Instruction: `upload_vanity_package(vanity_pubkey, encrypted_json)`
 
+### SPL Token (NFT)
+- Token Program: `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`
+- Associated Token Account Program: `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL`
+- Each NFT: supply=1, decimals=0 (non-fungible)
+- Minted to seller's ATA on upload, transferred to buyer on purchase, burned to decrypt
+
 ### Environment Variables
-- `SOLANA_DEVNET_PRIVKEY` - Base58-encoded seller wallet private key (required for uploads)
+- `SOLANA_DEVNET_PRIVKEY` - Base58-encoded seller wallet private key (required for uploads and NFT transfers)
 
 ## GUI Features
 - Tabbed interface: Word Miner and Marketplace
@@ -83,7 +106,7 @@ The Marketplace tab enables buying/decrypting blind vanity keys:
 - Log panel
 - Mine/Blind mode toggle with color-coded status indicators
 - Blind Mode inline seller wallet configuration
-- Marketplace buyer panel with package browser and decrypt
+- Marketplace: Buyer wallet input, Search with suffix filter, NFT status display, Buy & Burn button, decrypted key file saving
 
 ## Word Processing
 - Automatic l to 1 substitution: since lowercase 'l' is not a valid Base58 character, words containing 'l' get a variant with '1' substituted (e.g., "gold" becomes "go1d", "level" becomes "1eve1")
