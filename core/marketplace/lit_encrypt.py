@@ -101,21 +101,11 @@ def encrypt_private_key(
     _load_lit_action()
     lit = _get_lit_client()
 
-    auth_sig = None
-    if seller_kp is not None:
-        auth_sig = _make_auth_sig(seller_kp)
-        logger.info("Generated Solana authSig for %s", auth_sig.get("address", ""))
-
-    encrypt_kwargs = {
-        "data_to_encrypt": privkey_b58.encode("utf-8"),
-        "sol_rpc_conditions": sol_rpc_conditions,
-        "chain": "solanaDevnet",
-    }
-    if auth_sig:
-        encrypt_kwargs["auth_sig"] = auth_sig
-
     with _lit_lock:
-        result = lit.encrypt(**encrypt_kwargs)
+        result = lit.encrypt_string(
+            data_to_encrypt=privkey_b58,
+            sol_rpc_conditions=sol_rpc_conditions,
+        )
 
     if isinstance(result, dict):
         ciphertext = result.get("ciphertext", "")
@@ -174,7 +164,7 @@ def decrypt_private_key(
         decrypt_kwargs["auth_sig"] = auth_sig
 
     with _lit_lock:
-        result = lit.decrypt(**decrypt_kwargs)
+        result = lit.decrypt_string(**decrypt_kwargs)
 
     if isinstance(result, dict):
         for key in ("decryptedString", "decryptedData", "plaintext"):

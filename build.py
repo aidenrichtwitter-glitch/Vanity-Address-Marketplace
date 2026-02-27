@@ -103,6 +103,7 @@ def build():
         "--collect-all", "cffi",
         "--collect-all", "solders",
         "--collect-all", "solana",
+        "--collect-all", "lit_python_sdk",
         "--copy-metadata", "PySide6",
         "--copy-metadata", "shiboken6",
     ])
