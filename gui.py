@@ -6,8 +6,16 @@ import time
 import threading
 from pathlib import Path
 
+import json as _json
+
+def _get_app_dir():
+    return Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
+
+def _get_profile_path():
+    return _get_app_dir() / "solvanity_profile.json"
+
 def _load_dotenv():
-    env_path = Path(getattr(sys, '_MEIPASS', Path(__file__).parent)) / ".env"
+    env_path = _get_app_dir() / ".env"
     if not env_path.exists():
         env_path = Path(__file__).resolve().parent / ".env"
     if env_path.exists():
@@ -22,7 +30,26 @@ def _load_dotenv():
                 if key and key not in os.environ:
                     os.environ[key] = val
 
+def _load_profile():
+    p = _get_profile_path()
+    if p.exists():
+        try:
+            data = _json.loads(p.read_text(encoding="utf-8"))
+            for key in ("LIT_API_KEY", "SOLANA_DEVNET_PRIVKEY"):
+                val = data.get(key, "").strip()
+                if val and key not in os.environ:
+                    os.environ[key] = val
+            return data
+        except Exception:
+            pass
+    return {}
+
+def _save_profile(data: dict):
+    p = _get_profile_path()
+    p.write_text(_json.dumps(data, indent=2), encoding="utf-8")
+
 _load_dotenv()
+_load_profile()
 
 os.environ.setdefault("PYOPENCL_CTX", "0:0")
 if sys.platform != "win32":
@@ -514,6 +541,9 @@ class MainWindow(QMainWindow):
 
         marketplace_tab = self._build_marketplace_tab()
         self.tabs.addTab(marketplace_tab, "Marketplace")
+
+        settings_tab = self._build_settings_tab()
+        self.tabs.addTab(settings_tab, "Settings")
 
         root.addWidget(self.tabs)
 
@@ -1287,6 +1317,215 @@ class MainWindow(QMainWindow):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
         return tab
+
+    def _build_settings_tab(self):
+        from PySide6.QtWidgets import QScrollArea, QMessageBox
+        tab = QWidget()
+        outer = QVBoxLayout(tab)
+        outer.setContentsMargins(0, 0, 0, 0)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        inner = QWidget()
+        root = QVBoxLayout(inner)
+        root.setSpacing(14)
+        root.setContentsMargins(14, 14, 14, 14)
+
+        title = QLabel("Profile Settings")
+        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #6ea8fe; background: transparent;")
+        root.addWidget(title)
+
+        desc = QLabel(
+            "Configure your API keys below. Click Save Profile to store them locally "
+            "so you don't have to enter them again. Settings are saved to "
+            "solvanity_profile.json in the app directory."
+        )
+        desc.setWordWrap(True)
+        desc.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; padding-bottom: 6px;")
+        root.addWidget(desc)
+
+        api_box = QGroupBox("Lit Protocol API Key")
+        api_layout = QVBoxLayout(api_box)
+        api_layout.setSpacing(6)
+
+        api_desc = QLabel(
+            "Required for Blind Mode encryption. Get a key at "
+            "https://dashboard.dev.litprotocol.com"
+        )
+        api_desc.setWordWrap(True)
+        api_desc.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent;")
+        api_layout.addWidget(api_desc)
+
+        api_row = QHBoxLayout()
+        api_row.setSpacing(8)
+        self.settings_lit_key_edit = QLineEdit()
+        self.settings_lit_key_edit.setEchoMode(QLineEdit.Password)
+        self.settings_lit_key_edit.setPlaceholderText("Enter your Lit Protocol API key")
+        existing_lit = os.environ.get("LIT_API_KEY", "")
+        if existing_lit:
+            self.settings_lit_key_edit.setText(existing_lit)
+        api_row.addWidget(self.settings_lit_key_edit)
+        lit_show_btn = QPushButton("Show/Hide")
+        lit_show_btn.setFixedWidth(90)
+        lit_show_btn.clicked.connect(lambda: self.settings_lit_key_edit.setEchoMode(
+            QLineEdit.Normal if self.settings_lit_key_edit.echoMode() == QLineEdit.Password else QLineEdit.Password
+        ))
+        api_row.addWidget(lit_show_btn)
+        api_layout.addLayout(api_row)
+
+        self.lit_key_status = QLabel("")
+        self.lit_key_status.setStyleSheet("font-size: 10px; background: transparent;")
+        if existing_lit:
+            self.lit_key_status.setText("Loaded from profile/environment")
+            self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
+        api_layout.addWidget(self.lit_key_status)
+        root.addWidget(api_box)
+
+        wallet_box = QGroupBox("Solana Devnet Seller Wallet")
+        wallet_layout = QVBoxLayout(wallet_box)
+        wallet_layout.setSpacing(6)
+
+        wallet_desc = QLabel(
+            "Default seller wallet for Blind Mode. Can also be set per-session in the Mining tab."
+        )
+        wallet_desc.setWordWrap(True)
+        wallet_desc.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent;")
+        wallet_layout.addWidget(wallet_desc)
+
+        wallet_row = QHBoxLayout()
+        wallet_row.setSpacing(8)
+        self.settings_seller_key_edit = QLineEdit()
+        self.settings_seller_key_edit.setEchoMode(QLineEdit.Password)
+        self.settings_seller_key_edit.setPlaceholderText("Enter your Solana devnet private key (Base58)")
+        existing_seller = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+        if existing_seller:
+            self.settings_seller_key_edit.setText(existing_seller)
+        wallet_row.addWidget(self.settings_seller_key_edit)
+        seller_show_btn = QPushButton("Show/Hide")
+        seller_show_btn.setFixedWidth(90)
+        seller_show_btn.clicked.connect(lambda: self.settings_seller_key_edit.setEchoMode(
+            QLineEdit.Normal if self.settings_seller_key_edit.echoMode() == QLineEdit.Password else QLineEdit.Password
+        ))
+        wallet_row.addWidget(seller_show_btn)
+        wallet_layout.addLayout(wallet_row)
+
+        self.seller_key_status = QLabel("")
+        self.seller_key_status.setStyleSheet("font-size: 10px; background: transparent;")
+        if existing_seller:
+            self.seller_key_status.setText("Loaded from profile/environment")
+            self.seller_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
+        wallet_layout.addWidget(self.seller_key_status)
+        root.addWidget(wallet_box)
+
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+
+        save_btn = QPushButton("Save Profile")
+        save_btn.setFixedWidth(140)
+        save_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a6e2a; border: 2px solid #50e050;
+                border-radius: 6px; color: #e0ffe0; font-weight: bold;
+                font-size: 13px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #3a8e3a; }
+        """)
+        save_btn.clicked.connect(self._save_settings_profile)
+        btn_row.addWidget(save_btn)
+
+        apply_btn = QPushButton("Apply Now")
+        apply_btn.setFixedWidth(120)
+        apply_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a5a9e; border: 2px solid #4a8aee;
+                border-radius: 6px; color: #e0e8ff; font-weight: bold;
+                font-size: 13px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #3a6abe; }
+        """)
+        apply_btn.clicked.connect(self._apply_settings)
+        btn_row.addWidget(apply_btn)
+
+        clear_btn = QPushButton("Clear Profile")
+        clear_btn.setFixedWidth(120)
+        clear_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #6e2a2a; border: 2px solid #e05050;
+                border-radius: 6px; color: #ffe0e0; font-weight: bold;
+                font-size: 13px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #8e3a3a; }
+        """)
+        clear_btn.clicked.connect(self._clear_settings_profile)
+        btn_row.addWidget(clear_btn)
+
+        btn_row.addStretch()
+        root.addLayout(btn_row)
+
+        self.settings_status_label = QLabel("")
+        self.settings_status_label.setWordWrap(True)
+        self.settings_status_label.setStyleSheet("font-size: 11px; color: #50e050; background: transparent; padding: 4px 0;")
+        root.addWidget(self.settings_status_label)
+
+        profile_path_lbl = QLabel(f"Profile file: {_get_profile_path()}")
+        profile_path_lbl.setWordWrap(True)
+        profile_path_lbl.setStyleSheet("font-size: 10px; color: #5858a8; background: transparent;")
+        root.addWidget(profile_path_lbl)
+
+        root.addStretch()
+
+        scroll.setWidget(inner)
+        outer.addWidget(scroll)
+        return tab
+
+    def _save_settings_profile(self):
+        lit_key = self.settings_lit_key_edit.text().strip()
+        seller_key = self.settings_seller_key_edit.text().strip()
+
+        data = {}
+        if lit_key:
+            data["LIT_API_KEY"] = lit_key
+        if seller_key:
+            data["SOLANA_DEVNET_PRIVKEY"] = seller_key
+
+        try:
+            _save_profile(data)
+            self._apply_settings()
+            self.settings_status_label.setText(f"Profile saved to {_get_profile_path()}")
+            self.settings_status_label.setStyleSheet("font-size: 11px; color: #50e050; background: transparent; padding: 4px 0;")
+        except Exception as e:
+            self.settings_status_label.setText(f"Save failed: {e}")
+            self.settings_status_label.setStyleSheet("font-size: 11px; color: #e05050; background: transparent; padding: 4px 0;")
+
+    def _apply_settings(self):
+        lit_key = self.settings_lit_key_edit.text().strip()
+        seller_key = self.settings_seller_key_edit.text().strip()
+
+        if lit_key:
+            os.environ["LIT_API_KEY"] = lit_key
+            self.lit_key_status.setText("Applied to session")
+            self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
+
+        if seller_key:
+            os.environ["SOLANA_DEVNET_PRIVKEY"] = seller_key
+            self.seller_key_status.setText("Applied to session")
+            self.seller_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
+            if hasattr(self, 'seller_wallet_edit') and not self.seller_wallet_edit.text().strip():
+                self.seller_wallet_edit.setText(seller_key)
+
+        self.settings_status_label.setText("Settings applied to current session")
+        self.settings_status_label.setStyleSheet("font-size: 11px; color: #50e050; background: transparent; padding: 4px 0;")
+
+    def _clear_settings_profile(self):
+        p = _get_profile_path()
+        if p.exists():
+            p.unlink()
+        self.settings_lit_key_edit.clear()
+        self.settings_seller_key_edit.clear()
+        self.lit_key_status.setText("")
+        self.seller_key_status.setText("")
+        self.settings_status_label.setText("Profile cleared")
+        self.settings_status_label.setStyleSheet("font-size: 11px; color: #e0a050; background: transparent; padding: 4px 0;")
 
     def _set_compute_mode(self, mode):
         self._compute_mode = mode
