@@ -948,23 +948,6 @@ class MainWindow(QMainWindow):
         return tab
 
     def _set_mining_mode(self, mode):
-        if mode == "blind":
-            wallet = self.seller_wallet_edit.text().strip()
-            if not wallet:
-                self.mine_mode_btn.setChecked(True)
-                self.blind_mode_btn.setChecked(False)
-                self._on_log("Blind Mode requires a seller wallet. Set SOLANA_DEVNET_PRIVKEY or load a key file first.")
-                return
-            try:
-                from core.marketplace.solana_client import load_seller_keypair
-                kp = load_seller_keypair(wallet)
-                self._on_log(f"Seller wallet validated: {kp.pubkey()}")
-            except Exception as e:
-                self.mine_mode_btn.setChecked(True)
-                self.blind_mode_btn.setChecked(False)
-                self._on_log(f"Invalid seller key: {e}")
-                return
-
         self._mining_mode = mode
         self.mine_mode_btn.setChecked(mode == "mine")
         self.blind_mode_btn.setChecked(mode == "blind")
@@ -1428,6 +1411,19 @@ class MainWindow(QMainWindow):
             self._start_mining()
 
     def _start_mining(self):
+        if self._mining_mode == "blind":
+            wallet = self.seller_wallet_edit.text().strip()
+            if not wallet:
+                self._on_log("Blind Mode requires a seller wallet. Enter your key in the Seller Wallet field, or set SOLANA_DEVNET_PRIVKEY env var.")
+                return
+            try:
+                from core.marketplace.solana_client import load_seller_keypair
+                kp = load_seller_keypair(wallet)
+                self._on_log(f"Seller wallet validated: {kp.pubkey()}")
+            except Exception as e:
+                self._on_log(f"Invalid seller key: {e}")
+                return
+
         self.results_table.setRowCount(0)
         self.log_text.clear()
         self.count_label.setText("Found: 0")
