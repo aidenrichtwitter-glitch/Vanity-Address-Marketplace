@@ -123,7 +123,11 @@ def search_packages(search_filter=""):
     packages = fetch_all_packages()
     packages = _enrich_packages(packages)
 
-    packages = [p for p in packages if p.get("nft_status") != "BURNED"]
+    packages = [
+        p for p in packages
+        if p.get("nft_status") == "ACTIVE"
+        and p.get("verified") == "TEE Verified"
+    ]
 
     search_filter = (search_filter or "").strip().lower()
     if search_filter:
