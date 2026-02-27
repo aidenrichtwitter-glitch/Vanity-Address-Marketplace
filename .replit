@@ -27,4 +27,4 @@ outputType = "vnc"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "DISPLAY=:1 python gui.py"
+args = "python gui.py"
