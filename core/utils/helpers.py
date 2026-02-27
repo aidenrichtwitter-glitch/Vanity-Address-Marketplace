@@ -1,10 +1,8 @@
 import logging
-import platform
 import sys
 from pathlib import Path
 from typing import Tuple
 
-import pyopencl as cl
 from base58 import b58decode
 
 
@@ -89,8 +87,4 @@ def load_kernel_source(
             source_lines[i] = f"#define SUFFIX_BYTES {suffix_bytes}\n"
 
     source_str = "".join(source_lines)
-    if "NVIDIA" in str(cl.get_platforms()) and platform.system() == "Windows":
-        source_str = source_str.replace("#define __generic\n", "")
-    if cl.get_cl_header_version()[0] != 1 and platform.system() != "Windows":
-        source_str = source_str.replace("#define __generic\n", "")
     return source_str

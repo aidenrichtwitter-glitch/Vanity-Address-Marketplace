@@ -28,13 +28,13 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/cli.py` - Original SolVanityCL GPU search command (prefix/suffix)
 - `core/searcher.py` - GPU searcher using OpenCL (output buffer cleared between runs)
 - `core/config.py` - Host settings for GPU kernel (default iteration bits: 20)
-- `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (variable-length suffix matching)
+- `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (variable-length suffix matching); uses `ADDR_GENERIC` macro for cross-GPU compatibility (expands to `__generic` on OpenCL 2.0+, empty on 1.2)
 - `core/opencl/manager.py` - OpenCL device manager
 - `core/word_miner.py` - GPU word mining engine with persistent workers; PID thermal controller
 - `core/word_filter.py` - Suffix word detection with literal "X" padding check
 - `core/words.py` - Word list loader with l to 1 substitution; saves processed list to wordlists/ folder
 - `core/utils/crypto.py` - Ed25519 keypair generation; saves as {word}.txt with address and Base58 private key
-- `core/utils/helpers.py` - Kernel source loader and Base58 validation
+- `core/utils/helpers.py` - Kernel source loader (sets N/L/PREFIXES/SUFFIX_BYTES at load time) and Base58 validation; ensures L >= 1 to avoid zero-length SPIR-V arrays
 - `core/utils/gpu_temp.py` - GPU temperature monitoring (pynvml + nvidia-smi fallback); GPU name detection and recommended temp lookup
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
