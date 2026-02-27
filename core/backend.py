@@ -277,13 +277,14 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
 
     def _upload():
         try:
-            mp_fn("  Step 1/6: Importing modules...")
+            mp_fn("  Step 1/7: Importing modules...")
             import base58 as b58_mod
             from nacl.signing import SigningKey
             from core.marketplace.solana_client import load_seller_keypair, upload_package
             from core.marketplace.nft import mint_nft
+            from core.marketplace.lit_encrypt import encrypt_private_key
             from solders.pubkey import Pubkey
-            mp_fn("  Step 1/6: Imports OK")
+            mp_fn("  Step 1/7: Imports OK")
         except Exception as e:
             log_fn(f"IMPORT FAILED: {e}")
             mp_fn(f"  FATAL: Import failed: {e}")
@@ -293,10 +294,10 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             return
 
         try:
-            mp_fn("  Step 2/6: Loading seller keypair...")
+            mp_fn("  Step 2/7: Loading seller keypair...")
             seller_kp = load_seller_keypair(wallet)
             seller_pubkey = str(seller_kp.pubkey())
-            mp_fn(f"  Step 2/6: Seller loaded: {seller_pubkey}")
+            mp_fn(f"  Step 2/7: Seller loaded: {seller_pubkey}")
         except Exception as e:
             log_fn(f"WALLET LOAD FAILED: {e}")
             mp_fn(f"  FATAL: Could not load seller wallet: {e}")
@@ -307,15 +308,48 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             return
 
         try:
-            mp_fn("  Step 3/6: Minting NFT on devnet...")
+            mp_fn("  Step 3/7: Encoding private key...")
+            sk = SigningKey(pv_bytes)
+            pb_bytes = bytes(sk.verify_key)
+            privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+            mp_fn(f"  Step 3/7: Private key encoded ({len(privkey_b58)} chars)")
+        except Exception as e:
+            log_fn(f"KEY ENCODING FAILED: {e}")
+            mp_fn(f"  FATAL: Failed to encode private key: {e}")
+            mp_fn(f"  Traceback: {_tb.format_exc()}")
+            if on_error:
+                on_error(str(e), pubkey)
+            return
+
+        try:
+            mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
+            mp_fn("    Connecting to Lit network and executing Lit Action...")
+            encrypted = encrypt_private_key(privkey_b58, pubkey)
+            mp_fn("  Step 4/7: Lit encryption SUCCEEDED")
+            mp_fn(f"    encryptedInTEE: True")
+            mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
+            mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
+        except Exception as e:
+            log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
+            mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
+            mp_fn(f"  The private key will NOT be uploaded in plaintext.")
+            mp_fn(f"  Lit Protocol must be reachable for blind uploads to work securely.")
+            mp_fn(f"  Traceback: {_tb.format_exc()}")
+            if on_error:
+                on_error(f"Lit encryption failed — upload aborted (key not exposed): {e}", pubkey)
+            return
+
+        try:
+            mp_fn("  Step 5/7: Minting NFT on devnet...")
             mp_fn(f"    Seller: {seller_pubkey}")
             mint_address = mint_nft(seller_kp)
             log_fn(f"NFT minted: {mint_address}")
-            mp_fn(f"  Step 3/6: NFT minted OK: {mint_address}")
+            mp_fn(f"  Step 5/7: NFT minted OK: {mint_address}")
             mp_fn(f"    Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
         except Exception as e:
             log_fn(f"MINT FAILED: {e}")
             mp_fn(f"  FATAL: NFT mint failed: {e}")
+            mp_fn(f"  Key was encrypted but NFT could not be minted")
             mp_fn(f"  This usually means insufficient SOL or RPC error")
             mp_fn(f"  Traceback: {_tb.format_exc()}")
             if on_error:
@@ -323,18 +357,16 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             return
 
         try:
-            mp_fn("  Step 4/6: Building package JSON...")
-            sk = SigningKey(pv_bytes)
-            pb_bytes = bytes(sk.verify_key)
-            privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
-            mp_fn(f"    Private key encoded: {privkey_b58[:8]}...{privkey_b58[-8:]} ({len(privkey_b58)} chars)")
-
+            mp_fn("  Step 6/7: Building encrypted package JSON...")
             package_json = {
                 "vanityAddress": pubkey,
-                "privateKey": privkey_b58,
+                "ciphertext": encrypted["ciphertext"],
+                "dataToEncryptHash": encrypted["dataToEncryptHash"],
+                "accessControlConditions": encrypted.get("accessControlConditions", []),
+                "litActionHash": encrypted.get("litActionHash", ""),
                 "mintAddress": mint_address,
                 "sellerAddress": seller_pubkey,
-                "encryptedInTEE": False,
+                "encryptedInTEE": True,
             }
             if vanity_word:
                 package_json["vanityWord"] = vanity_word
@@ -343,8 +375,10 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 mp_fn(f"    Price: {price_display} ({package_json['priceLamports']} lamports)")
 
             json_size = len(json.dumps(package_json))
-            mp_fn(f"  Step 4/6: Package built OK ({json_size} bytes, {len(package_json)} fields)")
+            mp_fn(f"  Step 6/7: Package built OK ({json_size} bytes, {len(package_json)} fields)")
             mp_fn(f"    Fields: {list(package_json.keys())}")
+            if "privateKey" in package_json:
+                raise RuntimeError("SECURITY: plaintext privateKey must never be in the package")
         except Exception as e:
             log_fn(f"PACKAGE BUILD FAILED: {e}")
             mp_fn(f"  FATAL: Failed to build package: {e}")
@@ -354,19 +388,8 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             return
 
         try:
-            mp_fn("  Step 5/6: Deriving PDA...")
+            mp_fn("  Step 7/7: Uploading encrypted package to Solana devnet PDA...")
             vanity_pubkey = Pubkey.from_string(pubkey)
-            mp_fn(f"    Vanity pubkey: {vanity_pubkey}")
-        except Exception as e:
-            log_fn(f"PDA DERIVATION FAILED: {e}")
-            mp_fn(f"  FATAL: Could not derive PDA: {e}")
-            mp_fn(f"  Traceback: {_tb.format_exc()}")
-            if on_error:
-                on_error(str(e), pubkey)
-            return
-
-        try:
-            mp_fn("  Step 6/6: Uploading package to Solana devnet PDA...")
             mp_fn("    Sending transaction...")
             result = upload_package(
                 seller_kp=seller_kp,
@@ -382,13 +405,14 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             nft_url = f"https://explorer.solana.com/address/{mint_address}?cluster=devnet"
 
             log_fn(f"SUCCESS: {pubkey[:20]}... uploaded ({price_display})")
-            mp_fn("  Step 6/6: Upload SUCCESS")
-            mp_fn("=== UPLOAD COMPLETE ===")
+            mp_fn("  Step 7/7: Upload SUCCESS")
+            mp_fn("=== UPLOAD COMPLETE (Lit Encrypted) ===")
             mp_fn(f"  Vanity Address: {pubkey}")
             mp_fn(f"  Word: {vanity_word or '(none)'}")
             mp_fn(f"  NFT Mint: {mint_address}")
             mp_fn(f"  PDA: {pda_addr}")
             mp_fn(f"  Price: {price_display}")
+            mp_fn(f"  Encrypted: YES (TEE)")
             mp_fn(f"  TX Signature: {sig}")
             mp_fn(f"  TX Explorer: {explorer_url}")
             mp_fn(f"  NFT Explorer: {nft_url}")

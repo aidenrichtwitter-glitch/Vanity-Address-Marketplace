@@ -54,11 +54,14 @@ The Word Miner tab has a mode toggle:
 ### Blind Mode
 - Found vanity keys are uploaded to a Solana devnet PDA paired with an NFT
 - An NFT (SPL token, supply=1) is minted alongside each upload to enable burn-to-decrypt
-- The package JSON includes mintAddress, sellerAddress, vanityWord, priceLamports, and encryptedInTEE fields
+- The package JSON includes ciphertext, dataToEncryptHash, accessControlConditions, litActionHash, mintAddress, sellerAddress, vanityWord, priceLamports, and encryptedInTEE fields
 - Seller sets a price in SOL (stored as priceLamports in the package); 0 = free
-- The private key is NEVER saved locally or shown to the user in production (currently plaintext in test mode since Lit Protocol is unreachable from Replit)
+- Lit Protocol TEE encryption is REQUIRED — if Lit is unreachable, the upload is aborted entirely (no plaintext fallback)
+- The plaintext private key is NEVER stored on-chain; only the Lit-encrypted ciphertext is uploaded
+- NFT minting only occurs AFTER successful Lit encryption to avoid orphaned NFTs on failure
+- A runtime security assertion prevents the plaintext privateKey field from ever appearing in the package JSON
 - Requires a seller wallet (base58 private key) configured in the inline wallet input
-- Only buyers who burn the NFT can decrypt the key
+- Only buyers who burn the NFT can decrypt the key via Lit Protocol
 
 ## NFT Burn-to-Decrypt Marketplace
 The Marketplace tab enables an NFT-based vanity key marketplace:
