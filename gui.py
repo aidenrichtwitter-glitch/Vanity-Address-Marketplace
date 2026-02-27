@@ -7,11 +7,12 @@ import threading
 from pathlib import Path
 
 os.environ.setdefault("PYOPENCL_CTX", "0:0")
-os.environ["DISPLAY"] = ":1"
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
-os.environ.setdefault("QT_QUICK_BACKEND", "software")
-os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
-os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-runner")
+if sys.platform != "win32":
+    os.environ.setdefault("DISPLAY", ":0")
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+    os.environ.setdefault("QT_QUICK_BACKEND", "software")
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+    os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp/runtime-runner")
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
