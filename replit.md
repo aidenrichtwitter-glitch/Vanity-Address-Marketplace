@@ -1,191 +1,35 @@
-# SolVanity Word Miner (SolVanityCL Fork)
+# SolVanity Word Miner
 
 ## Overview
-A GPU-accelerated Solana vanity address miner with both a web UI (Flask) and a desktop GUI (PySide6/Qt). Mines addresses whose last characters match dictionary words with optional "X" padding. Includes a blind vanity key marketplace with NFT-based burn-to-decrypt mechanics — mined keys are encrypted with Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers burn the NFT to decrypt and save the private key locally.
+SolVanity Word Miner is a GPU-accelerated application for generating Solana vanity addresses. It allows users to mine addresses that end with dictionary words, including support for "X" padding and character substitutions (e.g., 'l' to '1'). The project features both a web-based UI (Flask) and a desktop GUI (PySide6/Qt). A key innovation is its integrated blind vanity key marketplace, leveraging NFT-based burn-to-decrypt mechanics. Mined keys are encrypted using Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers can acquire these NFTs and then burn them to decrypt and retrieve the private key locally, facilitating a secure and decentralized marketplace for vanity addresses.
 
-Examples of vanity addresses:
-- `...XXomen` (XX padding + 4-letter word)
-- `...Xdream` (X padding + 5-letter word)  
-- `...dragon` (6-letter word, no padding needed)
-- `...adventure` (9-letter word, full match)
-- `...go1d` (l to 1 substitution: "gold")
+## User Preferences
+When making changes, ensure that new features or modifications are implemented identically across both the web application (Flask) and the desktop GUI (PySide6). All marketplace features, including table columns, filtering logic, buyer wallet interactions, and available actions (Buy, Burn & Decrypt, Relist), must maintain a 1:1 parity between the two frontends. Avoid implementing features in one frontend without a corresponding implementation in the other.
 
-Suffix patterns are passed to the GPU via global memory buffers (not constant memory), allowing unlimited pattern count without hitting the 64KB constant memory limit.
+## System Architecture
+The application is designed around a shared backend (`core/backend.py`) that serves both the Flask web UI and the PySide6 desktop GUI, ensuring feature parity. The core mining functionality is GPU-accelerated using OpenCL for efficient Ed25519 key generation and Base58 encoding, allowing for variable-length suffix matching without constant memory limitations. A `word_miner.py` module manages GPU workers and includes a PID thermal controller for GPU temperature management.
 
-## GPU Setup
-Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capable GPU.**
+The blind vanity key marketplace integrates with the Solana blockchain on devnet. Keys are encrypted client-side using Lit Protocol's Chipotle V3 REST API (AES-256-GCM within TEEs) and uploaded as compact JSON packages to Solana PDAs. Each uploaded package is associated with a unique SPL token NFT (supply=1, decimals=0), minted upon successful encryption. The marketplace supports buying, selling, relisting, and a burn-to-decrypt mechanism where burning the NFT triggers key decryption. A bounty board allows users to request specific vanity words with SOL rewards.
 
-## Architecture
-- `web_app.py` - Flask web UI server (port 5000) with SSE for real-time updates — thin routes that call `core/backend.py`
-- `templates/index.html` - Web frontend with tabbed interface (Word Miner + Marketplace tabs)
-- `static/style.css` - Dark theme CSS matching the original Qt design
-- `gui.py` - PySide6 desktop GUI (used for Windows builds via PyInstaller) — calls `core/backend.py` for all marketplace/bounty logic
-- `core/backend.py` - Shared backend module used by both web_app.py and gui.py; provides unified APIs for marketplace search, buy_nft, burn_and_decrypt, relist_nft, blind upload, and bounty board CRUD
-- `main.py` - CLI entry point (alternative to GUI)
-- `build.py` - PyInstaller build script to create standalone executable
-- `wordlist_3000.txt` - Default word list (3000 common English words, ~2000 Base58-valid)
-- `wordlists/processed_wordlist.txt` - Auto-generated processed wordlist with l to 1 substitutions applied
-- `core/cli.py` - Original SolVanityCL GPU search command (prefix/suffix)
-- `core/searcher.py` - GPU searcher using OpenCL (output buffer cleared between runs)
-- `core/config.py` - Host settings for GPU kernel (default iteration bits: 20)
-- `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (variable-length suffix matching); uses `ADDR_GENERIC` macro for cross-GPU compatibility (expands to `__generic` on OpenCL 2.0+, empty on 1.2)
-- `core/opencl/manager.py` - OpenCL device manager
-- `core/word_miner.py` - GPU word mining engine with persistent workers; PID thermal controller
-- CPU mining mode also available (pure Python: `secrets.token_bytes` + nacl Ed25519 + base58); ~10K keys/s — suitable for testing or machines without GPU; supports `simple_suffix` param for instant single-character matching (bypasses WordFilter padding check)
-- `core/word_filter.py` - Suffix word detection with literal "X" padding check
-- `core/words.py` - Word list loader with l to 1 substitution; saves processed list to wordlists/ folder
-- `core/utils/crypto.py` - Ed25519 keypair generation; saves as {word}.txt with address and Base58 private key
-- `core/utils/helpers.py` - Kernel source loader (sets N/L/PREFIXES/SUFFIX_BYTES at load time) and Base58 validation; ensures L >= 1 to avoid zero-length SPIR-V arrays
-- `core/utils/gpu_temp.py` - GPU temperature monitoring (pynvml + nvidia-smi fallback); GPU name detection and recommended temp lookup
-- `core/marketplace/` - Blind vanity key marketplace module
-  - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
-  - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing; on-chain packages use compact key names (ct/iv/wk/wi/dh/va/lh/ma/sa/vw/pl) and strip reconstructable fields (solRpcConditions, encryptedInTEE, litNetwork) to fit within Solana's 1232-byte transaction limit — `_compact_package()` shrinks before upload, `_expand_package()` restores on read
-  - `lit_encrypt.py` - Lit Protocol encryption/decryption via Chipotle V3 REST API; uses AES-256-GCM inside TEE (Trusted Execution Environment) with a wrapping key derived from HMAC(API_KEY, conditions); no Node.js, no SDK — pure HTTP calls to `POST /core/v1/lit_action` with inline JavaScript; conditions include dummy `pdaInterface`/`pdaKey` to satisfy on-chain format
-  - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
-  - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
+The UI/UX across both web and desktop versions features a tabbed interface for Word Miner and Marketplace functionalities. The web UI uses `templates/index.html` with `static/style.css` for a dark theme, while the desktop GUI provides a rich, interactive experience. GPU monitoring (temperature, name, power, max temp settings) is integrated into the UI.
 
-## Mining Modes
-The Word Miner tab has a mode toggle:
+Key technical implementations include:
+- GPU searcher (`core/searcher.py`) with an OpenCL kernel (`core/opencl/kernel.cl`) optimized for suffix matching.
+- Word processing (`core/words.py`) for loading word lists, including automatic 'l' to '1' substitutions for Base58 compatibility.
+- Solana client (`core/marketplace/solana_client.py`) for PDA derivation, transaction building, and on-chain package interaction, with data compaction for Solana transaction limits.
+- Lit Protocol encryption (`core/marketplace/lit_encrypt.py`) for secure key storage, relying on TEEs and HTTP calls.
+- SPL token operations (`core/marketplace/nft.py`) for NFT minting, transfer, and burning.
+- `bounties.json` for local storage and management of bounty requests.
 
-### Mine Mode (default)
-- Found vanity keys are saved locally as .txt files
-- Private key is visible to the user
-- Standard behavior for personal vanity address mining
-
-### Blind Mode
-- Found vanity keys are uploaded to a Solana devnet PDA paired with an NFT
-- An NFT (SPL token, supply=1) is minted alongside each upload to enable burn-to-decrypt
-- The package JSON includes ciphertext, dataToEncryptHash, accessControlConditions, litActionHash, mintAddress, sellerAddress, vanityWord, priceLamports, and encryptedInTEE fields
-- Seller sets a price in SOL (stored as priceLamports in the package); 0 = free
-- Lit Protocol TEE encryption is REQUIRED — if Lit is unreachable, the upload is aborted entirely (no plaintext fallback)
-- The plaintext private key is NEVER stored on-chain; only the Lit-encrypted ciphertext is uploaded
-- NFT minting only occurs AFTER successful Lit encryption to avoid orphaned NFTs on failure
-- A runtime security assertion prevents the plaintext privateKey field from ever appearing in the package JSON
-- Requires a seller wallet (base58 private key) configured in the inline wallet input
-- Only buyers who burn the NFT can decrypt the key via Lit Protocol
-
-## NFT Burn-to-Decrypt Marketplace
-The Marketplace tab enables an NFT-based vanity key marketplace:
-
-### How It Works
-1. **Seller (Blind Mode)**: Mines a vanity key → mints an NFT → encrypts key with Lit Protocol → uploads encrypted data + NFT mint address to PDA
-2. **Buyer**: Browses marketplace → selects a package → buys the NFT (pays SOL + receives NFT transfer) → can resell or burn
-3. **Burn**: NFT holder burns the NFT → key is decrypted via Lit Protocol → saved locally. Burning is permanent.
-4. **Relist**: NFT holder can relist at a new price, updating the on-chain package with their address as new seller
-
-### Buyer Flow
-1. Enter buyer wallet (private key) in the Buyer Wallet section
-2. Click "Search Packages" to fetch all uploaded PDAs from devnet
-3. Packages show: vanity word, address suffix, NFT mint (clickable explorer link), price, status (ACTIVE/BURNED), verification (TEE Verified/Unverified)
-4. Select an ACTIVE package:
-   - **Buy**: Pays SOL to seller + transfers NFT to buyer. Buyer now holds the NFT.
-   - **Burn & Decrypt**: Burns the NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/`. Must own the NFT first.
-   - **Relist**: Updates the on-chain package with new price and seller address. Must own the NFT.
-5. Burned packages show as "SOLD" and cannot be re-purchased
-
-### Pricing
-- Seller sets price in SOL when mining in Blind Mode (Price field in UI)
-- Price stored as `priceLamports` integer in the package JSON uploaded to the PDA
-- When buyer clicks Buy & Burn, SOL is transferred from buyer to seller before NFT transfer
-- Buyer balance is checked before purchase; insufficient funds returns an error
-- Price of 0 = free (no SOL transfer required)
-
-### Bounty Board
-- Buyers can post bounties requesting specific vanity words with SOL rewards
-- Bounties stored locally in `bounties.json` (GET/POST/DELETE via `/api/bounties`)
-- Fields: word, reward_sol, buyer_address, status (open/fulfilled), notes
-- Miners can fulfill bounties by mining the requested word and submitting it
-- Bounty UI in the Marketplace tab with post/cancel/list functionality
-
-### Saved Keys
-Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
-- Vanity address
-- Private key (Base58)
-- NFT mint address
-- Burn transaction signature
-
-### On-Chain Program
-- Program ID: `5saJBeNvrbQ4WcVueFietuBxAixnV1u8StXUriXUuFj5` (deployed on devnet)
-- Native Solana program (no Anchor framework) at `anchor_program/programs/blind_vanity/src/lib.rs`
-- Built with `solana-program 1.18` + `borsh 0.10` using `cargo-build-sbf`
-- PDA seed: `b"vanity_pkg"` + vanity pubkey bytes
-- Instruction discriminator: `[0xa5, 0x69, 0x67, 0xa8, 0xe5, 0xd6, 0xb1, 0xfb]`
-- Account discriminator: `[0x18, 0x46, 0x62, 0xBF, 0x3A, 0x90, 0x7B, 0x9E]`
-- Account data layout: discriminator(8) + vanity_pubkey(32) + json_len(4) + json_bytes + authority(32) + bump(1)
-- Instruction: `upload_vanity_package(vanity_pubkey, encrypted_json)`
-- Deployer wallet: `4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever`
-
-### SPL Token (NFT)
-- Token Program: `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`
-- Associated Token Account Program: `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL`
-- Each NFT: supply=1, decimals=0 (non-fungible)
-- Minted to seller's ATA on upload, transferred to buyer on purchase, burned to decrypt
-
-### Environment Variables
-- `SOLANA_DEVNET_PRIVKEY` - Base58-encoded seller wallet private key (required for uploads and NFT transfers)
-- `LIT_API_KEY` - Chipotle V3 API key for Lit Protocol TEE encryption/decryption (create at https://dashboard.dev.litprotocol.com or via POST to API /new_account)
-
-## GUI Features
-- Tabbed interface: Word Miner and Marketplace
-- Collapsible Mining Settings panel (click header to expand/collapse)
-- Min Word Length (1-20)
-- Output Directory with Browse button
-- Word List file picker (Browse/Clear)
-- GPU Power slider (10-100%) for manual throttle
-- Max GPU Temp setting (60-95 C) with auto-detection of recommended default per GPU model
-- Detected GPU name display
-- Live GPU temperature display (color-coded: green/yellow/red) in dedicated panel
-- Found Addresses table with word suffix and timing
-- Log panel
-- Mine/Blind mode toggle with color-coded status indicators
-- Blind Mode inline seller wallet configuration
-- Marketplace: Buyer wallet input, Search with suffix filter, NFT status display, Buy & Burn button, decrypted key file saving
-
-## Word Processing
-- Automatic l to 1 substitution: since lowercase 'l' is not a valid Base58 character, words containing 'l' get a variant with '1' substituted (e.g., "gold" becomes "go1d", "level" becomes "1eve1")
-- Processed wordlist automatically saved to `wordlists/processed_wordlist.txt`
-- ~837 additional words recovered from l to 1 substitution
-
-## Dependencies
-- **Flask** - Web UI framework (for Replit webview)
-- **PySide6** - Qt GUI framework (for Windows desktop builds)
-- **pyopencl** - GPU acceleration (required)
-- **pynacl** - Ed25519 key generation
-- **base58** - Base58 encoding for Solana addresses
-- **click** - CLI framework (for main.py)
-- **cffi** - Native C bindings (required by pynacl)
-- **pynvml** - NVIDIA GPU temperature monitoring
-- **pyinstaller** - Build standalone executable
-- **solders** - Solana keypair/pubkey/instruction types
-- **solana** - Solana RPC client (solana-py)
-- **requests** - HTTP client for Lit Protocol Chipotle V3 REST API calls
-
-## Building
-```bash
-pip install pyopencl pynacl base58 click PySide6 pynvml pyinstaller solders solana requests
-python build.py
-# Output: dist/solvanity.exe (Windows) or dist/solvanity (Linux)
-```
-
-## Custom Word Lists
-Create a `.txt` file with one word per line. Lines starting with `#` are treated as comments. Non-Base58 words are silently filtered. l to 1 substitution is applied automatically. Use the "Browse" button to select your file.
-
-## Output
-Found keypairs saved as `{word}.txt` (e.g., `dream.txt`, `go1d.txt`) in the output directory. Duplicates get numbered (`dream_1.txt`). Each file contains the address and Base58-encoded private key.
-
-## Performance Notes
-- GPU output buffer is cleared between kernel runs to prevent duplicate results
-- Persistent worker processes avoid kernel recompilation between rounds
-- GPU Power slider adds sleep delays between kernel batches (manual throttle)
-- PID thermal controller smoothly adjusts delay to hold GPU at target temperature
-- Temperature polling runs in background thread to avoid UI lag
-- nvidia-smi subprocess uses CREATE_NO_WINDOW on Windows to prevent console flicker
-- Suffix lengths pre-computed on host and passed as separate buffer (eliminates per-work-item length scan in kernel)
-- Suffix bytes pre-encoded as base58 indices on host (eliminates alphabet_indices lookup per comparison in kernel)
-- OpenCL kernel caching enabled (PYOPENCL_NO_CACHE=FALSE) for faster startup
-- Local work size increased to 64 for better GPU occupancy
-- increase_key32 uses byte-level arithmetic instead of Python big-integer conversion
-- save_keypair accepts pre-computed pubkey to avoid redundant Ed25519 derivation
-- Word count loading debounced (400ms) to prevent UI lag while typing
-- Speed reports time-based (~2s intervals) instead of iteration-count-based
-- GUI shows total keys checked and probability-based ETA
+## External Dependencies
+- **Flask**: Web application framework.
+- **PySide6**: Desktop GUI framework.
+- **pyopencl**: GPU acceleration for OpenCL-compatible devices.
+- **pynacl**: Cryptographic operations, specifically Ed25519 key generation.
+- **base58**: Base58 encoding and decoding.
+- **requests**: HTTP client for interacting with the Lit Protocol API and Solana RPC.
+- **solders**: Solana primitive types (keypair, pubkey, instruction).
+- **solana**: Solana RPC client library for blockchain interactions.
+- **pynvml**: NVIDIA GPU monitoring (temperature, usage).
+- **Lit Protocol (Chipotle V3 REST API)**: For TEE-based encryption and decryption of private keys.
+- **Solana Blockchain (Devnet)**: On-chain storage of encrypted packages in PDAs and NFT management via SPL Token Program.
