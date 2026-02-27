@@ -456,8 +456,9 @@ class MainWindow(QMainWindow):
         self._mining_mode = "mine"
 
     def _build_mining_tab(self):
-        tab = QWidget()
-        root = QVBoxLayout(tab)
+        from PySide6.QtWidgets import QScrollArea
+        inner = QWidget()
+        root = QVBoxLayout(inner)
         root.setSpacing(10)
         root.setContentsMargins(10, 10, 10, 10)
 
@@ -855,7 +856,11 @@ class MainWindow(QMainWindow):
         splitter.setSizes([340, 140])
         root.addWidget(splitter)
 
-        return tab
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(inner)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+        return scroll
 
     def _build_marketplace_tab(self):
         from PySide6.QtWidgets import QScrollArea
