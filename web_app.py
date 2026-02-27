@@ -563,12 +563,48 @@ def api_marketplace_buy():
     mint_address = data.get("mint_address", "")
     vanity_address = data.get("vanity_address", "")
 
-    result, err = shared.buy_and_burn(
+    result, err = shared.buy_nft(
         buyer_key, encrypted_json, mint_address, vanity_address,
         log_fn=lambda msg: buy_log.info(msg),
     )
     if err:
-        return jsonify({"error": err}), 400 if "required" in err or "already burned" in err or "Insufficient" in err or "don't own" in err else 500
+        return jsonify({"error": err}), 400
+    return jsonify(result)
+
+
+@app.route("/api/marketplace/burn", methods=["POST"])
+def api_marketplace_burn():
+    burn_log = logging.getLogger("marketplace.burn")
+    data = request.json or {}
+    buyer_key = data.get("buyer_key", "").strip()
+    encrypted_json = data.get("encrypted_json")
+    mint_address = data.get("mint_address", "")
+    vanity_address = data.get("vanity_address", "")
+
+    result, err = shared.burn_and_decrypt(
+        buyer_key, encrypted_json, mint_address, vanity_address,
+        log_fn=lambda msg: burn_log.info(msg),
+    )
+    if err:
+        return jsonify({"error": err}), 400
+    return jsonify(result)
+
+
+@app.route("/api/marketplace/relist", methods=["POST"])
+def api_marketplace_relist():
+    relist_log = logging.getLogger("marketplace.relist")
+    data = request.json or {}
+    owner_key = data.get("owner_key", "").strip()
+    mint_address = data.get("mint_address", "")
+    vanity_address = data.get("vanity_address", "")
+    new_price_sol = data.get("new_price_sol", 0)
+
+    result, err = shared.relist_nft(
+        owner_key, mint_address, vanity_address, new_price_sol,
+        log_fn=lambda msg: relist_log.info(msg),
+    )
+    if err:
+        return jsonify({"error": err}), 400
     return jsonify(result)
 
 

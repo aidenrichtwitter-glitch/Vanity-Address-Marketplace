@@ -128,16 +128,14 @@ def search_packages(search_filter=""):
     return packages
 
 
-def buy_and_burn(buyer_key, encrypted_json, mint_address, vanity_address,
-                 seller_key_override="", log_fn=None):
+def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
+            seller_key_override="", log_fn=None):
     if log_fn is None:
         log_fn = lambda msg: log.info(msg)
 
-    log_fn("=== BUY & BURN START ===")
+    log_fn("=== BUY NFT START ===")
     log_fn(f"  Vanity: {vanity_address}")
     log_fn(f"  Mint: {mint_address}")
-    log_fn(f"  Buyer key provided: {'yes' if buyer_key else 'no'} ({len(buyer_key)} chars)")
-    log_fn(f"  encrypted_json keys: {list((encrypted_json or {}).keys())}")
 
     if not buyer_key:
         return None, "Buyer private key required"
@@ -148,77 +146,121 @@ def buy_and_burn(buyer_key, encrypted_json, mint_address, vanity_address,
 
     try:
         from core.marketplace.solana_client import load_seller_keypair, transfer_sol
-        from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
+        from core.marketplace.nft import check_nft_supply, check_token_balance, transfer_nft
         from solders.pubkey import Pubkey as SoldersPubkey
 
-        log_fn("  Step 1: Checking NFT supply...")
         supply = check_nft_supply(mint_address)
-        log_fn(f"  Step 1: Supply = {supply}")
+        log_fn(f"  NFT supply = {supply}")
         if supply == 0:
             return None, "NFT already burned — key was already sold"
 
-        log_fn("  Step 2: Loading buyer keypair...")
         buyer_kp = load_seller_keypair(buyer_key)
-        log_fn(f"  Step 2: Buyer pubkey = {buyer_kp.pubkey()}")
+        buyer_pub = str(buyer_kp.pubkey())
+        log_fn(f"  Buyer: {buyer_pub}")
+
+        balance = check_token_balance(buyer_kp.pubkey(), mint_address)
+        if balance > 0:
+            return None, "You already own this NFT"
 
         price_lamports = int(encrypted_json.get("priceLamports", 0))
         seller_addr = encrypted_json.get("sellerAddress", "")
         payment_sig = None
-        log_fn(f"  Price: {price_lamports} lamports ({price_lamports / 1e9:.4f} SOL), Seller: {seller_addr or '(none)'}")
 
         if price_lamports > 0 and seller_addr:
-            log_fn("  Step 3: SOL payment required, checking balance...")
             seller_pubkey = SoldersPubkey.from_string(seller_addr)
             from solana.rpc.api import Client as SolClient
             from solana.rpc.commitment import Confirmed as SolConfirmed
             sol_client = SolClient("https://api.devnet.solana.com")
             buyer_balance = sol_client.get_balance(buyer_kp.pubkey(), SolConfirmed).value
-            log_fn(f"  Step 3: Buyer balance = {buyer_balance} lamports ({buyer_balance / 1e9:.4f} SOL)")
+            log_fn(f"  Buyer balance: {buyer_balance / 1e9:.4f} SOL")
             if buyer_balance < price_lamports + 10_000:
-                sol_needed = price_lamports / 1_000_000_000
-                sol_have = buyer_balance / 1_000_000_000
-                return None, f"Insufficient SOL. Need {sol_needed:.4f} SOL + fees, have {sol_have:.4f} SOL"
+                return None, f"Insufficient SOL. Need {price_lamports / 1e9:.4f} + fees, have {buyer_balance / 1e9:.4f}"
 
-            log_fn(f"  Step 3: Transferring {price_lamports} lamports to seller {seller_addr}...")
+            log_fn(f"  Paying {price_lamports / 1e9:.4f} SOL to {seller_addr[:12]}...")
             payment_sig = transfer_sol(buyer_kp, seller_pubkey, price_lamports)
-            log_fn(f"  Step 3: Payment sent, sig = {payment_sig}")
-            log_fn("  Step 3: Waiting 2s for confirmation...")
+            log_fn(f"  Payment sent: {payment_sig}")
             time.sleep(2)
         else:
-            log_fn("  Step 3: No payment required (free)")
+            log_fn("  No payment required (free)")
 
-        log_fn("  Step 4: Checking buyer NFT balance...")
+        seller_key_env = seller_key_override or os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+        if not seller_key_env:
+            return None, "Seller key not available for NFT transfer"
+
+        seller_kp_for_transfer = load_seller_keypair(seller_key_env)
+        if seller_addr and str(seller_kp_for_transfer.pubkey()) != seller_addr:
+            return None, f"Seller key mismatch: server key is {str(seller_kp_for_transfer.pubkey())[:12]}... but package seller is {seller_addr[:12]}..."
+
+        log_fn("  Transferring NFT to buyer...")
+        transfer_sig = transfer_nft(seller_kp_for_transfer, buyer_kp.pubkey(), mint_address)
+        log_fn(f"  NFT transferred: {transfer_sig}")
+
+        result = {
+            "ok": True,
+            "vanity_address": vanity_address,
+            "mint_address": mint_address,
+            "buyer": buyer_pub,
+            "transfer_sig": transfer_sig,
+        }
+        if payment_sig:
+            result["payment_sig"] = payment_sig
+            result["price_sol"] = price_lamports / 1_000_000_000
+
+        log_fn("=== BUY NFT COMPLETE ===")
+        return result, None
+
+    except Exception as e:
+        log_fn(f"=== BUY NFT FAILED: {e} ===")
+        log_fn(f"  Traceback: {_tb.format_exc()}")
+        return None, str(e)
+
+
+def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
+                     log_fn=None):
+    if log_fn is None:
+        log_fn = lambda msg: log.info(msg)
+
+    log_fn("=== BURN & DECRYPT START ===")
+    log_fn(f"  Vanity: {vanity_address}")
+    log_fn(f"  Mint: {mint_address}")
+
+    if not buyer_key:
+        return None, "Buyer private key required"
+    if not encrypted_json:
+        return None, "No encrypted data"
+    if not mint_address:
+        return None, "No NFT mint address"
+
+    try:
+        from core.marketplace.solana_client import load_seller_keypair
+        from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance
+
+        supply = check_nft_supply(mint_address)
+        if supply == 0:
+            return None, "NFT already burned — key was already sold"
+
+        buyer_kp = load_seller_keypair(buyer_key)
+        log_fn(f"  Buyer: {buyer_kp.pubkey()}")
+
         balance = check_token_balance(buyer_kp.pubkey(), mint_address)
-        log_fn(f"  Step 4: Buyer NFT balance = {balance}")
+        log_fn(f"  NFT balance = {balance}")
         if balance == 0:
-            if seller_addr:
-                seller_key_env = seller_key_override or os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
-                if seller_key_env:
-                    log_fn("  Step 4: Transferring NFT from seller to buyer...")
-                    seller_kp_for_transfer = load_seller_keypair(seller_key_env)
-                    transfer_nft(seller_kp_for_transfer, buyer_kp.pubkey(), mint_address)
-                    log_fn("  Step 4: NFT transferred to buyer")
-                else:
-                    return None, "You don't own this NFT. Transfer it first."
-            else:
-                return None, "You don't own this NFT. Transfer it first."
+            return None, "You don't own this NFT. Buy it first."
 
-        log_fn(f"  Step 5: Burning NFT {mint_address}...")
+        log_fn(f"  Burning NFT {mint_address}...")
         burn_sig = burn_nft(buyer_kp, mint_address)
-        log_fn(f"  Step 5: NFT burned, sig = {burn_sig}")
+        log_fn(f"  NFT burned: {burn_sig}")
 
         privkey = encrypted_json.get("privateKey", "")
         if not privkey:
-            log_fn("  Step 6: No plaintext key, attempting Lit decryption...")
+            log_fn("  Decrypting via Lit Protocol...")
             try:
                 from core.marketplace.lit_encrypt import decrypt_private_key
                 privkey = decrypt_private_key(encrypted_json, buyer_kp=buyer_kp)
-                log_fn("  Step 6: Lit decryption succeeded")
+                log_fn("  Decryption succeeded")
             except Exception as e:
-                log_fn(f"  Step 6: Lit decryption failed: {e}")
+                log_fn(f"  Decryption failed: {e}")
                 privkey = f"(decryption unavailable: {str(e)[:60]})"
-        else:
-            log_fn(f"  Step 6: Plaintext key found in package ({len(privkey)} chars)")
 
         out_dir = Path("decrypted_keys")
         out_dir.mkdir(exist_ok=True)
@@ -229,33 +271,101 @@ def buy_and_burn(buyer_key, encrypted_json, mint_address, vanity_address,
             f"NFT Mint: {mint_address}",
             f"Burn TX: {burn_sig}",
         ]
-        if payment_sig:
-            lines.append(f"Payment TX: {payment_sig}")
-            lines.append(f"Price: {price_lamports} lamports ({price_lamports / 1e9:.4f} SOL)")
         out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        log_fn(f"  Step 7: Key saved to {out_file}")
+        log_fn(f"  Key saved to {out_file}")
 
-        result = {
+        log_fn("=== BURN & DECRYPT COMPLETE ===")
+        return {
             "ok": True,
             "file": str(out_file),
             "burn_sig": burn_sig,
             "vanity_address": vanity_address,
             "privkey": privkey,
-        }
-        if payment_sig:
-            result["payment_sig"] = payment_sig
-            result["price_sol"] = price_lamports / 1_000_000_000
-
-        log_fn("=== BUY & BURN COMPLETE ===")
-        log_fn(f"  Burn sig: {burn_sig}")
-        if payment_sig:
-            log_fn(f"  Payment sig: {payment_sig}")
-        log_fn(f"  Key file: {out_file}")
-        return result, None
+        }, None
 
     except Exception as e:
-        log_fn(f"=== BUY & BURN FAILED ===")
-        log_fn(f"  Error: {e}")
+        log_fn(f"=== BURN & DECRYPT FAILED: {e} ===")
+        log_fn(f"  Traceback: {_tb.format_exc()}")
+        return None, str(e)
+
+
+def relist_nft(owner_key, mint_address, vanity_address, new_price_sol=0,
+               log_fn=None):
+    if log_fn is None:
+        log_fn = lambda msg: log.info(msg)
+
+    log_fn("=== RELIST NFT START ===")
+    log_fn(f"  Vanity: {vanity_address}")
+    log_fn(f"  Mint: {mint_address}")
+    log_fn(f"  New price: {new_price_sol} SOL")
+
+    if not owner_key:
+        return None, "Owner private key required"
+    if not mint_address:
+        return None, "No NFT mint address"
+
+    try:
+        from core.marketplace.solana_client import (
+            load_seller_keypair, fetch_all_packages, upload_package, get_pda
+        )
+        from core.marketplace.nft import check_nft_supply, check_token_balance
+        from solders.pubkey import Pubkey as SoldersPubkey
+
+        supply = check_nft_supply(mint_address)
+        if supply == 0:
+            return None, "NFT already burned — cannot relist"
+
+        owner_kp = load_seller_keypair(owner_key)
+        owner_pub = str(owner_kp.pubkey())
+        log_fn(f"  Owner: {owner_pub}")
+
+        balance = check_token_balance(owner_kp.pubkey(), mint_address)
+        if balance == 0:
+            return None, "You don't own this NFT"
+
+        log_fn("  Fetching existing package data...")
+        packages = fetch_all_packages()
+        existing_pkg = None
+        pkg_vanity = None
+        for p in packages:
+            enc = p.get("encrypted_json", {})
+            if enc.get("mintAddress") == mint_address:
+                existing_pkg = enc
+                pkg_vanity = p.get("vanity_address", "")
+                break
+
+        if not existing_pkg:
+            return None, "Package not found on-chain for this NFT"
+
+        if pkg_vanity and pkg_vanity != vanity_address:
+            return None, f"Vanity address mismatch: on-chain={pkg_vanity[:16]}... vs provided={vanity_address[:16]}..."
+
+        existing_pkg["sellerAddress"] = owner_pub
+        new_price_lamports = int(float(new_price_sol) * 1_000_000_000) if new_price_sol else 0
+        existing_pkg["priceLamports"] = new_price_lamports
+        log_fn(f"  Updated seller to {owner_pub}, price to {new_price_lamports} lamports")
+
+        vanity_pubkey = SoldersPubkey.from_string(pkg_vanity or vanity_address)
+        result = upload_package(
+            seller_kp=owner_kp,
+            vanity_pubkey=vanity_pubkey,
+            encrypted_json=existing_pkg,
+        )
+        log_fn(f"  Relist uploaded: {result.get('signature', '')[:40]}...")
+
+        log_fn("=== RELIST COMPLETE ===")
+        return {
+            "ok": True,
+            "vanity_address": vanity_address,
+            "mint_address": mint_address,
+            "new_price_sol": float(new_price_sol),
+            "new_seller": owner_pub,
+            "signature": result.get("signature", ""),
+            "pda": result.get("pda", ""),
+        }, None
+
+    except Exception as e:
+        log_fn(f"=== RELIST FAILED: {e} ===")
         log_fn(f"  Traceback: {_tb.format_exc()}")
         return None, str(e)
 

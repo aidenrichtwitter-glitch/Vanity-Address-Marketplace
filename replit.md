@@ -20,7 +20,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `templates/index.html` - Web frontend with tabbed interface (Word Miner + Marketplace tabs)
 - `static/style.css` - Dark theme CSS matching the original Qt design
 - `gui.py` - PySide6 desktop GUI (used for Windows builds via PyInstaller) — calls `core/backend.py` for all marketplace/bounty logic
-- `core/backend.py` - Shared backend module used by both web_app.py and gui.py; provides unified APIs for marketplace search, buy & burn, blind upload, and bounty board CRUD
+- `core/backend.py` - Shared backend module used by both web_app.py and gui.py; provides unified APIs for marketplace search, buy_nft, burn_and_decrypt, relist_nft, blind upload, and bounty board CRUD
 - `main.py` - CLI entry point (alternative to GUI)
 - `build.py` - PyInstaller build script to create standalone executable
 - `wordlist_3000.txt` - Default word list (3000 common English words, ~2000 Base58-valid)
@@ -69,16 +69,19 @@ The Marketplace tab enables an NFT-based vanity key marketplace:
 
 ### How It Works
 1. **Seller (Blind Mode)**: Mines a vanity key → mints an NFT → encrypts key with Lit Protocol → uploads encrypted data + NFT mint address to PDA
-2. **Buyer**: Browses marketplace → selects a package → burns the NFT → key is decrypted and saved locally
-3. **Resale**: NFTs can be transferred between wallets before burning. Once burned, the key is revealed and cannot be re-sold.
+2. **Buyer**: Browses marketplace → selects a package → buys the NFT (pays SOL + receives NFT transfer) → can resell or burn
+3. **Burn**: NFT holder burns the NFT → key is decrypted via Lit Protocol → saved locally. Burning is permanent.
+4. **Relist**: NFT holder can relist at a new price, updating the on-chain package with their address as new seller
 
 ### Buyer Flow
 1. Enter buyer wallet (private key) in the Buyer Wallet section
 2. Click "Search Packages" to fetch all uploaded PDAs from devnet
-3. Packages show: vanity address, vanity word, NFT mint, price, status (ACTIVE/BURNED), verification (TEE Verified/Unknown Code/Unverified)
-4. Select an ACTIVE package and click "Burn & Decrypt"
-5. The app: transfers NFT to buyer → burns NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/` folder
-6. Burned packages show as "SOLD" and cannot be re-purchased
+3. Packages show: vanity word, address suffix, NFT mint (clickable explorer link), price, status (ACTIVE/BURNED), verification (TEE Verified/Unverified)
+4. Select an ACTIVE package:
+   - **Buy**: Pays SOL to seller + transfers NFT to buyer. Buyer now holds the NFT.
+   - **Burn & Decrypt**: Burns the NFT on-chain → decrypts via Lit Protocol → saves key to `decrypted_keys/`. Must own the NFT first.
+   - **Relist**: Updates the on-chain package with new price and seller address. Must own the NFT.
+5. Burned packages show as "SOLD" and cannot be re-purchased
 
 ### Pricing
 - Seller sets price in SOL when mining in Blind Mode (Price field in UI)
