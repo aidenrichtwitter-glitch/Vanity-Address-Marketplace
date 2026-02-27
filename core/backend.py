@@ -389,12 +389,12 @@ def relist_nft(owner_key, mint_address, vanity_address, new_price_sol=0,
             return None, f"Vanity address mismatch: on-chain={pkg_vanity[:16]}... vs provided={vanity_address[:16]}..."
 
         existing_pkg["sellerAddress"] = owner_pub
-        if new_price_sol is not None and str(new_price_sol).strip() != "":
+        try:
             new_price_lamports = int(float(new_price_sol) * 1_000_000_000)
-            existing_pkg["priceLamports"] = new_price_lamports
-            log_fn(f"  Updated seller to {owner_pub}, price to {new_price_lamports} lamports")
-        else:
-            log_fn(f"  Updated seller to {owner_pub}, keeping existing price {existing_pkg.get('priceLamports', 0)} lamports")
+        except (TypeError, ValueError):
+            new_price_lamports = existing_pkg.get("priceLamports", 0)
+        existing_pkg["priceLamports"] = new_price_lamports
+        log_fn(f"  Updated seller to {owner_pub}, price to {new_price_lamports} lamports ({new_price_lamports / 1e9:.4f} SOL)")
 
         vanity_pubkey = SoldersPubkey.from_string(pkg_vanity or vanity_address)
         result = upload_package(

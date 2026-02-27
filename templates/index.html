@@ -159,6 +159,12 @@
                     </table>
                 </div>
                 <span class="mp-status" id="ownedStatus"></span>
+                <div id="ownedRelistDialog" style="display:none;margin-top:6px" class="inline-row">
+                    <span class="field-label">Price (SOL):</span>
+                    <input type="number" id="ownedRelistPrice" value="0.01" min="0" step="0.001" style="width:100px">
+                    <button class="btn btn-search btn-sm" onclick="confirmRelistOwned()">List for Sale</button>
+                    <button class="btn btn-secondary btn-sm" onclick="cancelRelistOwned()">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -668,6 +674,13 @@ var _relistTarget = null;
 function relistOwned(mintAddress, vanityAddress, btnEl) {
     const buyerKey = document.getElementById('buyerWallet').value.trim();
     if (!buyerKey) { alert('Wallet key required'); return; }
+
+    const pkg = (window._ownedPackages || []).find(p =>
+        (p.encrypted_json || {}).mintAddress === mintAddress
+    );
+    const currentLamports = pkg ? (pkg.encrypted_json || {}).priceLamports || 0 : 0;
+    const currentSol = currentLamports > 0 ? (currentLamports / 1e9).toFixed(4) : '0.01';
+    document.getElementById('ownedRelistPrice').value = currentSol;
 
     _relistTarget = {mint: mintAddress, vanity: vanityAddress, btn: btnEl};
     const dlg = document.getElementById('ownedRelistDialog');
