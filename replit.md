@@ -31,6 +31,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/opencl/kernel.cl` - OpenCL Ed25519 + Base58 kernel (variable-length suffix matching); uses `ADDR_GENERIC` macro for cross-GPU compatibility (expands to `__generic` on OpenCL 2.0+, empty on 1.2)
 - `core/opencl/manager.py` - OpenCL device manager
 - `core/word_miner.py` - GPU word mining engine with persistent workers; PID thermal controller
+- CPU mining mode also available (pure Python: `secrets.token_bytes` + nacl Ed25519 + base58); ~10K keys/s — suitable for testing or machines without GPU
 - `core/word_filter.py` - Suffix word detection with literal "X" padding check
 - `core/words.py` - Word list loader with l to 1 substitution; saves processed list to wordlists/ folder
 - `core/utils/crypto.py` - Ed25519 keypair generation; saves as {word}.txt with address and Base58 private key
@@ -38,7 +39,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/utils/gpu_temp.py` - GPU temperature monitoring (pynvml + nvidia-smi fallback); GPU name detection and recommended temp lookup
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
-  - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
+  - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing; on-chain packages use compact key names (ct/iv/wk/wi/dh/va/lh/ma/sa/vw/pl) and strip reconstructable fields (solRpcConditions, encryptedInTEE, litNetwork) to fit within Solana's 1232-byte transaction limit — `_compact_package()` shrinks before upload, `_expand_package()` restores on read
   - `lit_encrypt.py` - Lit Protocol encryption/decryption via Chipotle V3 REST API; uses AES-256-GCM inside TEE (Trusted Execution Environment) with a wrapping key derived from HMAC(API_KEY, conditions); no Node.js, no SDK — pure HTTP calls to `POST /core/v1/lit_action` with inline JavaScript; conditions include dummy `pdaInterface`/`pdaKey` to satisfy on-chain format
   - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks

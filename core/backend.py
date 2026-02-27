@@ -369,6 +369,9 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 "sellerAddress": seller_pubkey,
                 "encryptedInTEE": True,
             }
+            for extra_key in ("iv", "wrappedKey", "wrapIv", "litNetwork"):
+                if extra_key in encrypted:
+                    package_json[extra_key] = encrypted[extra_key]
             if vanity_word:
                 package_json["vanityWord"] = vanity_word
             if price_sol and float(price_sol) > 0:

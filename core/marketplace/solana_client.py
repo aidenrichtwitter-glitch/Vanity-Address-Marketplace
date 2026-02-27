@@ -20,6 +20,7 @@ from core.marketplace.config import (
     ACCOUNT_DISCRIMINATOR,
     RPC_URL,
     SOL_RPC_CONDITIONS,
+    LIT_NETWORK,
 )
 
 logger = logging.getLogger(__name__)
@@ -92,6 +93,46 @@ def build_upload_ix(
     return Instruction(program_id=PROGRAM_ID, accounts=accounts, data=data)
 
 
+COMPACT_KEY_MAP = {
+    "ciphertext": "ct",
+    "iv": "iv",
+    "wrappedKey": "wk",
+    "wrapIv": "wi",
+    "dataToEncryptHash": "dh",
+    "vanityAddress": "va",
+    "litActionHash": "lh",
+    "mintAddress": "ma",
+    "sellerAddress": "sa",
+    "vanityWord": "vw",
+    "priceLamports": "pl",
+}
+
+EXPAND_KEY_MAP = {v: k for k, v in COMPACT_KEY_MAP.items()}
+
+STRIP_ON_UPLOAD = {"solRpcConditions", "encryptedInTEE", "litNetwork"}
+
+
+def _compact_package(pkg: dict) -> dict:
+    compact = {}
+    for k, v in pkg.items():
+        if k in STRIP_ON_UPLOAD:
+            continue
+        short = COMPACT_KEY_MAP.get(k, k)
+        compact[short] = v
+    return compact
+
+
+def _expand_package(compact: dict) -> dict:
+    expanded = {}
+    for k, v in compact.items():
+        full = EXPAND_KEY_MAP.get(k, k)
+        expanded[full] = v
+    expanded["solRpcConditions"] = SOL_RPC_CONDITIONS
+    expanded["encryptedInTEE"] = True
+    expanded["litNetwork"] = LIT_NETWORK
+    return expanded
+
+
 def upload_package(
     seller_kp: Keypair,
     vanity_pubkey: Pubkey,
@@ -100,7 +141,8 @@ def upload_package(
 ) -> dict:
     logger.info("[upload_package] seller=%s vanity=%s rpc=%s", seller_kp.pubkey(), vanity_pubkey, rpc_url)
     client = Client(rpc_url)
-    encrypted_json_bytes = json.dumps(encrypted_json).encode("utf-8")
+    compact = _compact_package(encrypted_json)
+    encrypted_json_bytes = json.dumps(compact, separators=(',', ':')).encode("utf-8")
     logger.info("[upload_package] Package JSON size: %d bytes", len(encrypted_json_bytes))
     pda = get_pda(vanity_pubkey)
     logger.info("[upload_package] PDA: %s", pda)
@@ -177,7 +219,9 @@ def _parse_package_data(data: bytes) -> Optional[dict]:
         known_disc = disc in (INSTRUCTION_DISCRIMINATOR, ACCOUNT_DISCRIMINATOR)
 
         if not known_disc:
-            json_start = data.find(b'{"ciphertext')
+            json_start = data.find(b'{"ct"')
+            if json_start == -1:
+                json_start = data.find(b'{"ciphertext')
             if json_start == -1:
                 json_start = data.find(b'{"vanityAddress')
             if json_start == -1:
@@ -187,6 +231,8 @@ def _parse_package_data(data: bytes) -> Optional[dict]:
             if last_brace > 0:
                 json_str = json_str[: last_brace + 1]
             pkg = json.loads(json_str)
+            if "ct" in pkg:
+                pkg = _expand_package(pkg)
             return {
                 "vanity_address": pkg.get("vanityAddress", "unknown"),
                 "encrypted_json": pkg,
@@ -207,6 +253,8 @@ def _parse_package_data(data: bytes) -> Optional[dict]:
         json_bytes = data[offset : offset + json_len]
         try:
             encrypted_json = json.loads(json_bytes.decode("utf-8"))
+            if "ct" in encrypted_json:
+                encrypted_json = _expand_package(encrypted_json)
         except (UnicodeDecodeError, json.JSONDecodeError):
             encrypted_json = {
                 "ciphertext": b58_mod.b58encode(json_bytes).decode("utf-8"),

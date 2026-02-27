@@ -51,20 +51,27 @@
                 </div>
             </div>
             <div class="row">
-                <div class="field grow">
+                <div class="field">
+                    <span class="field-label">Compute</span>
+                    <div style="display:flex; gap:4px;">
+                        <button class="mode-btn active mine" id="cpuModeBtn" onclick="setComputeMode('cpu')" style="padding:4px 12px; font-size:12px;">CPU</button>
+                        <button class="mode-btn" id="gpuModeBtn" onclick="setComputeMode('gpu')" style="padding:4px 12px; font-size:12px;">GPU</button>
+                    </div>
+                </div>
+                <div class="field grow" id="gpuPowerField">
                     <span class="field-label">GPU Power</span>
                     <div class="power-row">
                         <input type="range" id="powerSlider" min="10" max="100" value="100" step="5" oninput="document.getElementById('powerLabel').textContent=this.value+'%'">
                         <span class="power-label" id="powerLabel">100%</span>
                     </div>
                 </div>
-                <div class="field">
+                <div class="field" id="maxTempField">
                     <span class="field-label">Max GPU Temp</span>
                     <input type="number" id="maxTemp" value="80" min="60" max="95" style="width:90px">
                 </div>
-                <div class="field">
+                <div class="field" id="gpuNameField">
                     <span class="field-label">Detected GPU</span>
-                    <span class="gpu-name" id="gpuName">Detecting...</span>
+                    <span class="gpu-name" id="gpuName">Not detected</span>
                 </div>
             </div>
         </div>
@@ -193,6 +200,7 @@
 <script>
 let isMining = false;
 let miningMode = 'mine';
+let computeMode = 'cpu';
 let selectedPackageIdx = -1;
 let packagesData = [];
 let eventSource = null;
@@ -253,6 +261,33 @@ function setMiningMode(mode) {
         document.getElementById('wordlistClearBtn').disabled = true;
         document.getElementById('wordlistLabel').textContent = 'Word List (locked to built-in list — uploads cost SOL)';
         loadWordCount();
+    }
+}
+
+function setComputeMode(mode) {
+    computeMode = mode;
+    const cpuBtn = document.getElementById('cpuModeBtn');
+    const gpuBtn = document.getElementById('gpuModeBtn');
+    const gpuPower = document.getElementById('gpuPowerField');
+    const maxTemp = document.getElementById('maxTempField');
+    const gpuName = document.getElementById('gpuNameField');
+
+    if (mode === 'cpu') {
+        cpuBtn.className = 'mode-btn active mine';
+        gpuBtn.className = 'mode-btn';
+        gpuPower.style.opacity = '0.3';
+        gpuPower.style.pointerEvents = 'none';
+        maxTemp.style.opacity = '0.3';
+        maxTemp.style.pointerEvents = 'none';
+        gpuName.style.opacity = '0.3';
+    } else {
+        cpuBtn.className = 'mode-btn';
+        gpuBtn.className = 'mode-btn active mine';
+        gpuPower.style.opacity = '1';
+        gpuPower.style.pointerEvents = 'auto';
+        maxTemp.style.opacity = '1';
+        maxTemp.style.pointerEvents = 'auto';
+        gpuName.style.opacity = '1';
     }
 }
 
@@ -324,6 +359,7 @@ function startMining() {
         mining_mode: miningMode,
         blind_wallet: document.getElementById('sellerWallet').value.trim(),
         blind_price_sol: parseFloat(document.getElementById('blindPrice').value) || 0,
+        compute_mode: computeMode,
     };
 
     document.getElementById('foundTable').innerHTML = '';
@@ -373,7 +409,7 @@ function updateMiningButton() {
 }
 
 function setControlsEnabled(enabled) {
-    const ids = ['minWordLen', 'outputDir', 'wordlistFile', 'powerSlider', 'maxTemp', 'mineModeBtn', 'blindModeBtn'];
+    const ids = ['minWordLen', 'outputDir', 'wordlistFile', 'powerSlider', 'maxTemp', 'mineModeBtn', 'blindModeBtn', 'cpuModeBtn', 'gpuModeBtn'];
     ids.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.disabled = !enabled;
@@ -452,6 +488,13 @@ function connectSSE() {
         updateMiningButton();
         setControlsEnabled(true);
         if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+        const label = document.getElementById('statusLabel');
+        if (label.textContent === 'Stopping...' || label.textContent === 'Starting...') {
+            label.textContent = 'Ready';
+        }
+        fetch('/api/status').then(r => r.json()).then(d => {
+            if (d.status) label.textContent = d.status;
+        }).catch(() => {});
     });
 
     eventSource.addEventListener('gpu_detected', e => {
@@ -736,6 +779,7 @@ function deleteBounty(id) {
 loadWordCount();
 loadBounties();
 connectSSE();
+setComputeMode('cpu');
 
 fetch('/api/status')
     .then(r => r.json())
