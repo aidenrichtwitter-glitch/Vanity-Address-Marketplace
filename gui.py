@@ -709,13 +709,32 @@ class MainWindow(QMainWindow):
         wallet_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
         wallet_row.addWidget(wallet_lbl)
         self.seller_wallet_edit = QLineEdit()
-        self.seller_wallet_edit.setPlaceholderText("Paste base58 private key or set SOLANA_DEVNET_PRIVKEY env var")
+        self.seller_wallet_edit.setPlaceholderText("Set SOLANA_DEVNET_PRIVKEY env var or load from file")
         self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
         env_key = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
         if env_key:
             self.seller_wallet_edit.setText(env_key)
         wallet_row.addWidget(self.seller_wallet_edit)
+
+        load_key_btn = QPushButton("Load Key File")
+        load_key_btn.setFixedWidth(110)
+        load_key_btn.clicked.connect(self._load_seller_key_file)
+        wallet_row.addWidget(load_key_btn)
+
+        show_key_btn = QPushButton("Show/Hide")
+        show_key_btn.setFixedWidth(90)
+        show_key_btn.clicked.connect(self._toggle_seller_key_visibility)
+        wallet_row.addWidget(show_key_btn)
+
         seller_layout.addLayout(wallet_row)
+
+        key_hint = QLabel(
+            "Tip: VNC doesn't support clipboard paste. Use the 'Load Key File' button to load your private key "
+            "from a .txt file, or set the SOLANA_DEVNET_PRIVKEY secret in Replit."
+        )
+        key_hint.setWordWrap(True)
+        key_hint.setStyleSheet("font-size: 10px; color: #6868a0; background: transparent; padding: 2px 0;")
+        seller_layout.addWidget(key_hint)
 
         toggle_row = QHBoxLayout()
         toggle_row.setSpacing(12)
@@ -831,6 +850,30 @@ class MainWindow(QMainWindow):
             self._mp_log("Auto-upload disabled.")
             self.upload_status_label.setText("Auto-upload: OFF")
             self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+
+    def _load_seller_key_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Seller Private Key", "", "Text Files (*.txt *.key);;All Files (*)"
+        )
+        if path:
+            try:
+                with open(path, "r") as f:
+                    key_text = f.read().strip()
+                for line in key_text.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and len(line) >= 32:
+                        self.seller_wallet_edit.setText(line)
+                        self._mp_log(f"Loaded seller key from {os.path.basename(path)}")
+                        return
+                self._mp_log("No valid key found in file.")
+            except Exception as e:
+                self._mp_log(f"Failed to load key file: {e}")
+
+    def _toggle_seller_key_visibility(self):
+        if self.seller_wallet_edit.echoMode() == QLineEdit.Password:
+            self.seller_wallet_edit.setEchoMode(QLineEdit.Normal)
+        else:
+            self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
 
     def _mp_log(self, msg):
         self.mp_log_text.append(msg)
