@@ -15,18 +15,6 @@ import subprocess
 import sys
 
 
-def find_pyside6_paths():
-    try:
-        import PySide6
-        pyside6_dir = os.path.dirname(PySide6.__file__)
-        plugins_dir = os.path.join(pyside6_dir, "plugins")
-        if os.path.isdir(plugins_dir):
-            return pyside6_dir, plugins_dir
-    except ImportError:
-        pass
-    return None, None
-
-
 def build():
     sep = ";" if platform.system() == "Windows" else ":"
     add_data_kernel = f"core/opencl/kernel.cl{sep}core/opencl"
@@ -43,9 +31,30 @@ def build():
             print(f"       Close the running solvanity app first, then retry.")
             sys.exit(1)
 
-    pyside6_dir, plugins_dir = find_pyside6_paths()
-
     rth_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyi_rth_pyside6_plugins.py")
+
+    pyside6_excludes = [
+        "PySide6.Qt3DAnimation", "PySide6.Qt3DCore", "PySide6.Qt3DExtras",
+        "PySide6.Qt3DInput", "PySide6.Qt3DLogic", "PySide6.Qt3DRender",
+        "PySide6.QtAxContainer",
+        "PySide6.QtBluetooth", "PySide6.QtCharts", "PySide6.QtConcurrent",
+        "PySide6.QtDBus", "PySide6.QtDataVisualization", "PySide6.QtDesigner",
+        "PySide6.QtGraphs", "PySide6.QtGraphsWidgets", "PySide6.QtHelp",
+        "PySide6.QtHttpServer", "PySide6.QtLocation", "PySide6.QtMultimedia",
+        "PySide6.QtMultimediaWidgets", "PySide6.QtNetworkAuth", "PySide6.QtNfc",
+        "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtPositioning",
+        "PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.QtQuickControls2",
+        "PySide6.QtQuickTest", "PySide6.QtQuickWidgets", "PySide6.QtRemoteObjects",
+        "PySide6.QtScxml", "PySide6.QtSensors", "PySide6.QtSerialBus",
+        "PySide6.QtSerialPort", "PySide6.QtSpatialAudio", "PySide6.QtSql",
+        "PySide6.QtStateMachine", "PySide6.QtSvg", "PySide6.QtSvgWidgets",
+        "PySide6.QtTest", "PySide6.QtTextToSpeech", "PySide6.QtUiTools",
+        "PySide6.QtWebChannel", "PySide6.QtWebEngineCore",
+        "PySide6.QtWebEngineQuick", "PySide6.QtWebEngineWidgets",
+        "PySide6.QtWebSockets", "PySide6.QtWebView", "PySide6.QtXml",
+        "PySide6.QtQml", "PySide6.QtOpenGL", "PySide6.QtOpenGLWidgets",
+        "PySide6.QtPrintSupport", "PySide6.QtAsyncio",
+    ]
 
     cmd = [
         sys.executable, "-m", "PyInstaller",
@@ -55,37 +64,7 @@ def build():
         "--add-data", add_data_kernel,
         "--add-data", add_data_wordlist,
         "--add-data", add_data_lit_action,
-    ]
-
-    if os.path.exists(rth_path):
-        cmd.extend(["--runtime-hook", rth_path])
-
-    if plugins_dir and pyside6_dir:
-        cmd.extend(["--add-data", f"{plugins_dir}{sep}PySide6/plugins"])
-
-        for dll_name in [
-            "Qt6Core.dll", "Qt6Gui.dll", "Qt6Widgets.dll", "Qt6Network.dll",
-            "Qt6Core.pyd", "Qt6Gui.pyd", "Qt6Widgets.pyd", "Qt6Network.pyd",
-        ]:
-            dll_path = os.path.join(pyside6_dir, dll_name)
-            if os.path.exists(dll_path):
-                cmd.extend(["--add-binary", f"{dll_path}{sep}PySide6"])
-
-        for so_name in [
-            "QtCore.abi3.so", "QtGui.abi3.so", "QtWidgets.abi3.so", "QtNetwork.abi3.so",
-            "libQt6Core.so.6", "libQt6Gui.so.6", "libQt6Widgets.so.6", "libQt6Network.so.6",
-        ]:
-            so_path = os.path.join(pyside6_dir, so_name)
-            if os.path.exists(so_path):
-                cmd.extend(["--add-binary", f"{so_path}{sep}PySide6"])
-
-        shiboken_pyd = os.path.join(pyside6_dir, "..", "shiboken6", "shiboken6.abi3.so")
-        if not os.path.exists(shiboken_pyd):
-            shiboken_pyd = os.path.join(pyside6_dir, "..", "shiboken6", "shiboken6.pyd")
-        if os.path.exists(shiboken_pyd):
-            cmd.extend(["--add-binary", f"{shiboken_pyd}{sep}shiboken6"])
-
-    cmd.extend([
+        "--runtime-hook", rth_path,
         "--hidden-import", "cffi",
         "--hidden-import", "_cffi_backend",
         "--hidden-import", "pyopencl",
@@ -112,7 +91,6 @@ def build():
         "--hidden-import", "solana.rpc",
         "--hidden-import", "solana.rpc.api",
         "--hidden-import", "lit_python_sdk",
-        "--hidden-import", "PySide6",
         "--hidden-import", "PySide6.QtWidgets",
         "--hidden-import", "PySide6.QtCore",
         "--hidden-import", "PySide6.QtGui",
@@ -123,31 +101,10 @@ def build():
         "--collect-all", "cffi",
         "--collect-all", "solders",
         "--collect-all", "solana",
-        "--copy-metadata", "PySide6",
-        "--copy-metadata", "shiboken6",
-    ])
-
-    pyside6_excludes = [
-        "PySide6.Qt3DAnimation", "PySide6.Qt3DCore", "PySide6.Qt3DExtras",
-        "PySide6.Qt3DInput", "PySide6.Qt3DLogic", "PySide6.Qt3DRender",
-        "PySide6.QtBluetooth", "PySide6.QtCharts", "PySide6.QtConcurrent",
-        "PySide6.QtDBus", "PySide6.QtDataVisualization", "PySide6.QtDesigner",
-        "PySide6.QtGraphs", "PySide6.QtGraphsWidgets", "PySide6.QtHelp",
-        "PySide6.QtHttpServer", "PySide6.QtLocation", "PySide6.QtMultimedia",
-        "PySide6.QtMultimediaWidgets", "PySide6.QtNetworkAuth", "PySide6.QtNfc",
-        "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtPositioning",
-        "PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.QtQuickControls2",
-        "PySide6.QtQuickTest", "PySide6.QtQuickWidgets", "PySide6.QtRemoteObjects",
-        "PySide6.QtScxml", "PySide6.QtSensors", "PySide6.QtSerialBus",
-        "PySide6.QtSerialPort", "PySide6.QtSpatialAudio", "PySide6.QtSql",
-        "PySide6.QtStateMachine", "PySide6.QtSvg", "PySide6.QtSvgWidgets",
-        "PySide6.QtTest", "PySide6.QtTextToSpeech", "PySide6.QtUiTools",
-        "PySide6.QtWebChannel", "PySide6.QtWebEngineCore",
-        "PySide6.QtWebEngineQuick", "PySide6.QtWebEngineWidgets",
-        "PySide6.QtWebSockets", "PySide6.QtWebView", "PySide6.QtXml",
-        "PySide6.QtQml", "PySide6.QtOpenGL", "PySide6.QtOpenGLWidgets",
-        "PySide6.QtPrintSupport", "PySide6.QtAsyncio",
+        "--collect-all", "PySide6",
+        "--collect-all", "shiboken6",
     ]
+
     for mod in pyside6_excludes:
         cmd.extend(["--exclude-module", mod])
 
@@ -159,11 +116,9 @@ def build():
     print()
     print(f"  Platform:  {platform.system()} {platform.machine()}")
     print(f"  Python:    {sys.version.split()[0]}")
-    if pyside6_dir:
-        print(f"  PySide6:   {pyside6_dir}")
-        print(f"  Plugins:   {plugins_dir}")
     print()
     print("Building executable...")
+    print(f"  Excluding {len(pyside6_excludes)} unused PySide6 modules")
     print()
     subprocess.run(cmd, check=True)
 
