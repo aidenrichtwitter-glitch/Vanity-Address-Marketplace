@@ -236,6 +236,20 @@ input[type="range"] {
 .btn-burn:hover { background-color: #ae3a3a; }
 .btn-burn:disabled { background-color: #2a2a4a; border-color: #4a4a6e; color: #6666aa; font-size: 12px; }
 
+.btn-sm {
+    padding: 3px 10px;
+    font-size: 11px;
+    min-width: auto;
+    height: auto;
+    min-height: 24px;
+}
+
+.owned-actions {
+    white-space: nowrap;
+}
+
+.owned-actions .btn { margin-right: 4px; }
+
 .mode-frame {
     background-color: #222244;
     border: 1px solid #3a3a5c;

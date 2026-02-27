@@ -159,6 +159,12 @@
                     </table>
                 </div>
                 <span class="mp-status" id="ownedStatus"></span>
+                <div id="ownedRelistDialog" style="display:none;margin-top:6px" class="inline-row">
+                    <span class="field-label">New Price (SOL):</span>
+                    <input type="number" id="ownedRelistPrice" value="0.01" min="0" step="0.001" style="width:100px">
+                    <button class="btn btn-search btn-sm" onclick="confirmRelistOwned()">Confirm Relist</button>
+                    <button class="btn btn-secondary btn-sm" onclick="cancelRelistOwned()">Cancel</button>
+                </div>
             </div>
         </div>
 
@@ -180,18 +186,11 @@
             <div class="inline-row" style="margin-top:8px;gap:6px">
                 <button class="btn btn-search" id="buyBtn" disabled onclick="buyNft()">Buy - Select a package</button>
                 <button class="btn btn-burn" id="burnBtn" disabled onclick="burnNft()">Burn &amp; Decrypt</button>
-                <button class="btn btn-secondary" id="relistBtn" disabled onclick="showRelistDialog()">Relist</button>
                 <span class="decrypt-status" id="decryptStatus"></span>
             </div>
             <div class="result-row">
                 <label>Saved To:</label>
                 <input type="text" id="savedTo" readonly placeholder="Burn an NFT to decrypt - key will be saved to decrypted_keys/">
-            </div>
-            <div id="relistDialog" style="display:none;margin-top:8px" class="inline-row">
-                <span class="field-label">New Price (SOL):</span>
-                <input type="number" id="relistPrice" value="0.01" min="0" step="0.001" style="width:100px">
-                <button class="btn btn-search" onclick="relistNft()">Confirm Relist</button>
-                <button class="btn btn-secondary" onclick="document.getElementById('relistDialog').style.display='none'">Cancel</button>
             </div>
         </div>
 
@@ -565,6 +564,169 @@ function esc(s) {
     return d.innerHTML;
 }
 
+function loadOwnedNfts() {
+    const btn = document.getElementById('loadWalletBtn');
+    const buyerKey = document.getElementById('buyerWallet').value.trim();
+    const ownedSection = document.getElementById('ownedSection');
+    const ownedStatus = document.getElementById('ownedStatus');
+    const walletAddr = document.getElementById('walletAddress');
+    const tbody = document.getElementById('ownedTable');
+
+    if (!buyerKey) {
+        alert('Enter your wallet private key first');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Loading...';
+    ownedSection.style.display = 'block';
+    ownedStatus.textContent = 'Scanning devnet for your NFTs...';
+    tbody.innerHTML = '';
+
+    fetch('/api/marketplace/owned', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({buyer_key: buyerKey})
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        btn.textContent = 'Import';
+        if (d.error) {
+            ownedStatus.textContent = 'Error: ' + d.error;
+            return;
+        }
+        walletAddr.textContent = d.wallet || '';
+        const owned = d.owned || [];
+        if (owned.length === 0) {
+            ownedStatus.textContent = 'No NFTs found in this wallet';
+            return;
+        }
+        ownedStatus.textContent = `${owned.length} NFT(s) owned`;
+        owned.forEach(pkg => {
+            const tr = document.createElement('tr');
+            const addr = pkg.vanity_address || '';
+            const word = (pkg.encrypted_json || {}).vanityWord || '-';
+            const mint = (pkg.encrypted_json || {}).mintAddress || '';
+            const price = pkg.price || 'Free';
+            const suffix = addr.length >= 6 ? addr.slice(-6) : addr;
+            const mintLink = mint ? `<a href="https://explorer.solana.com/address/${esc(mint)}?cluster=devnet" target="_blank" class="nft-link" title="${esc(mint)}">${esc(mint.slice(0, 6))}...</a>` : '-';
+
+            tr.innerHTML = `<td class="word-cell">${esc(word)}</td><td class="suffix-cell">...${esc(suffix)}</td><td class="mint-cell">${mintLink}</td><td class="price-cell">${esc(price)}</td><td class="owned-actions"><button class="btn btn-burn btn-sm" onclick="burnOwned('${esc(mint)}','${esc(addr)}',this)">Burn &amp; Decrypt</button> <button class="btn btn-secondary btn-sm" onclick="relistOwned('${esc(mint)}','${esc(addr)}',this)">Relist</button></td>`;
+            tbody.appendChild(tr);
+        });
+        window._ownedPackages = owned;
+    })
+    .catch(e => {
+        btn.disabled = false;
+        btn.textContent = 'Import';
+        ownedStatus.textContent = 'Failed: ' + (e.message || e);
+    });
+}
+
+function burnOwned(mintAddress, vanityAddress, btnEl) {
+    const buyerKey = document.getElementById('buyerWallet').value.trim();
+    if (!buyerKey) { alert('Wallet key required'); return; }
+    if (!confirm('Burn this NFT permanently to decrypt the private key?')) return;
+
+    btnEl.disabled = true;
+    btnEl.textContent = 'Burning...';
+    const statusEl = document.getElementById('ownedStatus');
+    statusEl.textContent = 'Burning NFT + decrypting key...';
+
+    const pkg = (window._ownedPackages || []).find(p =>
+        (p.encrypted_json || {}).mintAddress === mintAddress
+    );
+    if (!pkg) { statusEl.textContent = 'Package data not found'; btnEl.disabled = false; btnEl.textContent = 'Burn & Decrypt'; return; }
+
+    fetch('/api/marketplace/burn', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            buyer_key: buyerKey,
+            encrypted_json: pkg.encrypted_json,
+            mint_address: mintAddress,
+            vanity_address: vanityAddress
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            statusEl.textContent = 'Burn failed: ' + d.error;
+            btnEl.disabled = false;
+            btnEl.textContent = 'Burn & Decrypt';
+        } else {
+            statusEl.textContent = 'Key decrypted and saved!';
+            document.getElementById('savedTo').value = d.saved_to || '';
+            btnEl.textContent = 'Burned';
+            btnEl.parentElement.closest('tr').style.opacity = '0.4';
+        }
+    })
+    .catch(e => {
+        statusEl.textContent = 'Burn error: ' + (e.message || e);
+        btnEl.disabled = false;
+        btnEl.textContent = 'Burn & Decrypt';
+    });
+}
+
+var _relistTarget = null;
+
+function relistOwned(mintAddress, vanityAddress, btnEl) {
+    const buyerKey = document.getElementById('buyerWallet').value.trim();
+    if (!buyerKey) { alert('Wallet key required'); return; }
+
+    _relistTarget = {mint: mintAddress, vanity: vanityAddress, btn: btnEl};
+    const dlg = document.getElementById('ownedRelistDialog');
+    dlg.style.display = 'flex';
+}
+
+function confirmRelistOwned() {
+    if (!_relistTarget) return;
+    const {mint, vanity, btn} = _relistTarget;
+    const buyerKey = document.getElementById('buyerWallet').value.trim();
+    const newPrice = document.getElementById('ownedRelistPrice').value || '0.01';
+    const dlg = document.getElementById('ownedRelistDialog');
+    dlg.style.display = 'none';
+
+    btn.disabled = true;
+    btn.textContent = 'Relisting...';
+    const statusEl = document.getElementById('ownedStatus');
+    statusEl.textContent = 'Relisting NFT at ' + newPrice + ' SOL...';
+
+    fetch('/api/marketplace/relist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            owner_key: buyerKey,
+            mint_address: mint,
+            vanity_address: vanity,
+            new_price_sol: newPrice
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        btn.textContent = 'Relist';
+        if (d.error) {
+            statusEl.textContent = 'Relist failed: ' + d.error;
+        } else {
+            statusEl.textContent = 'Relisted at ' + newPrice + ' SOL!';
+            loadOwnedNfts();
+        }
+    })
+    .catch(e => {
+        btn.disabled = false;
+        btn.textContent = 'Relist';
+        statusEl.textContent = 'Relist error: ' + (e.message || e);
+    });
+    _relistTarget = null;
+}
+
+function cancelRelistOwned() {
+    document.getElementById('ownedRelistDialog').style.display = 'none';
+    _relistTarget = null;
+}
+
 function searchPackages() {
     console.log('[searchPackages] called');
     const btn = document.getElementById('searchBtn');
@@ -651,10 +813,8 @@ function selectPackage(idx) {
     const pkg = packagesData[idx];
     const buyBtn = document.getElementById('buyBtn');
     const burnBtn = document.getElementById('burnBtn');
-    const relistBtn = document.getElementById('relistBtn');
     const addr = pkg.vanity_address || '';
     const suffix = addr.length >= 6 ? addr.slice(-6) : addr;
-    document.getElementById('relistDialog').style.display = 'none';
     document.getElementById('decryptStatus').textContent = '';
 
     if (pkg.nft_status === 'BURNED') {
@@ -662,7 +822,6 @@ function selectPackage(idx) {
         buyBtn.disabled = true;
         burnBtn.textContent = 'Already Burned';
         burnBtn.disabled = true;
-        relistBtn.disabled = true;
     } else {
         const priceLam = (pkg.encrypted_json || {}).priceLamports || 0;
         const priceDisplay = priceLam > 0 ? (priceLam / 1e9).toFixed(4) + ' SOL' : 'Free';
@@ -670,8 +829,6 @@ function selectPackage(idx) {
         buyBtn.disabled = false;
         burnBtn.textContent = 'Burn & Decrypt';
         burnBtn.disabled = false;
-        relistBtn.textContent = 'Relist';
-        relistBtn.disabled = false;
     }
 }
 
@@ -791,68 +948,12 @@ function burnNft() {
         document.getElementById('buyBtn').disabled = true;
         burnBtn.textContent = 'Already Burned';
         burnBtn.disabled = true;
-        document.getElementById('relistBtn').disabled = true;
     })
     .catch(e => {
         burnBtn.disabled = false;
         decryptStatus.textContent = 'Burn failed';
         decryptStatus.style.color = '#ff5050';
         appendLog('mpLog', 'Burn error: ' + e);
-    });
-}
-
-function showRelistDialog() {
-    document.getElementById('relistDialog').style.display = 'flex';
-}
-
-function relistNft() {
-    const pkg = _getSelectedPkg();
-    if (!pkg) return;
-    const decryptStatus = document.getElementById('decryptStatus');
-    const ownerKey = _getBuyerKey(decryptStatus);
-    if (!ownerKey) return;
-
-    const mintAddress = (pkg.encrypted_json || {}).mintAddress || '';
-    if (!mintAddress) { decryptStatus.textContent = 'No NFT mint'; decryptStatus.style.color = '#ff5050'; return; }
-
-    const newPrice = parseFloat(document.getElementById('relistPrice').value) || 0;
-    const relistBtn = document.getElementById('relistBtn');
-    relistBtn.disabled = true;
-    decryptStatus.textContent = 'Relisting...';
-    decryptStatus.style.color = '#ffaa30';
-
-    fetch('/api/marketplace/relist', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            owner_key: ownerKey,
-            mint_address: mintAddress,
-            vanity_address: pkg.vanity_address,
-            new_price_sol: newPrice,
-        })
-    })
-    .then(r => r.json())
-    .then(d => {
-        if (d.error) {
-            relistBtn.disabled = false;
-            decryptStatus.textContent = 'Relist failed: ' + d.error.substring(0, 80);
-            decryptStatus.style.color = '#ff5050';
-            appendLog('mpLog', 'Relist error: ' + d.error);
-            return;
-        }
-        decryptStatus.textContent = `Relisted at ${newPrice} SOL!`;
-        decryptStatus.style.color = '#50e050';
-        appendLog('mpLog', `Relisted NFT for ${pkg.vanity_address} at ${newPrice} SOL`);
-        appendLog('mpLog', `  New seller: ${d.new_seller}`);
-        appendLog('mpLog', `  TX: ${d.signature}`);
-        document.getElementById('relistDialog').style.display = 'none';
-        searchPackages();
-    })
-    .catch(e => {
-        relistBtn.disabled = false;
-        decryptStatus.textContent = 'Relist failed';
-        decryptStatus.style.color = '#ff5050';
-        appendLog('mpLog', 'Relist error: ' + e);
     });
 }
 
