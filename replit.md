@@ -39,7 +39,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
-  - `lit_encrypt.py` - Lit Protocol encryption/decryption using `solRpcConditions`; MUST use `datil` network (NOT `datil-dev` or `DatilDev` — only `datil` works); auto-patches `bundled_server.js` to: (1) remove hardcoded DatilDev auto-connect that crashes the Node.js sidecar, (2) inject `localStorage` polyfill (Node.js lacks browser localStorage, which Lit SDK v7 needs for SEV-SNP attestation cert caching); patch versioned via marker file to force re-patch on updates; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
+  - `lit_encrypt.py` - Lit Protocol encryption/decryption via Chipotle V3 REST API; uses AES-256-GCM inside TEE (Trusted Execution Environment) with a wrapping key derived from HMAC(API_KEY, conditions); no Node.js, no SDK — pure HTTP calls to `POST /core/v1/lit_action` with inline JavaScript; conditions include dummy `pdaInterface`/`pdaKey` to satisfy on-chain format
   - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
@@ -119,6 +119,7 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 
 ### Environment Variables
 - `SOLANA_DEVNET_PRIVKEY` - Base58-encoded seller wallet private key (required for uploads and NFT transfers)
+- `LIT_API_KEY` - Chipotle V3 API key for Lit Protocol TEE encryption/decryption (create at https://dashboard.dev.litprotocol.com or via POST to API /new_account)
 
 ## GUI Features
 - Tabbed interface: Word Miner and Marketplace
@@ -153,11 +154,11 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 - **pyinstaller** - Build standalone executable
 - **solders** - Solana keypair/pubkey/instruction types
 - **solana** - Solana RPC client (solana-py)
-- **lit-python-sdk** - Lit Protocol encryption/decryption via bundled Node.js sidecar server; IMPORTANT: only the `datil` network works (not `datil-dev`/`DatilDev`); requires Node.js v18+ on Windows; `lit_encrypt.py` auto-patches the bundled server to fix the hardcoded DatilDev auto-connect bug
+- **requests** - HTTP client for Lit Protocol Chipotle V3 REST API calls
 
 ## Building
 ```bash
-pip install pyopencl pynacl base58 click PySide6 pynvml pyinstaller solders solana lit-python-sdk
+pip install pyopencl pynacl base58 click PySide6 pynvml pyinstaller solders solana requests
 python build.py
 # Output: dist/solvanity.exe (Windows) or dist/solvanity (Linux)
 ```

@@ -1,9 +1,9 @@
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import os
-import time
 from typing import Optional
 
 import requests
@@ -12,12 +12,12 @@ from core.marketplace.config import SOL_RPC_CONDITIONS, LIT_API_BASE
 
 logger = logging.getLogger(__name__)
 
-_ENCRYPT_ACTION = r"""
-(async () => {
-  try {
-    const dataStr = jsParams.dataToEncrypt;
-    const conditionsJson = jsParams.conditionsJson;
-    const wrappingKeyB64 = jsParams.wrappingKeyB64;
+_ENCRYPT_TEMPLATE = """
+(async () => {{
+  try {{
+    const dataStr = {data_json};
+    const conditionsJson = {cond_json};
+    const wrappingKeyB64 = {wrapping_key_json};
 
     const wrappingKeyRaw = Uint8Array.from(atob(wrappingKeyB64), c => c.charCodeAt(0));
     const wrappingKey = await crypto.subtle.importKey(
@@ -25,20 +25,20 @@ _ENCRYPT_ACTION = r"""
     );
 
     const dataKey = await crypto.subtle.generateKey(
-      { name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]
+      {{ name: "AES-GCM", length: 256 }}, true, ["encrypt", "decrypt"]
     );
 
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const dataBytes = new TextEncoder().encode(dataStr);
     const cipherBuf = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv }, dataKey, dataBytes
+      {{ name: "AES-GCM", iv }}, dataKey, dataBytes
     );
 
     const exportedKey = await crypto.subtle.exportKey("raw", dataKey);
 
     const wrapIv = crypto.getRandomValues(new Uint8Array(12));
     const wrappedKeyBuf = await crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: wrapIv }, wrappingKey, exportedKey
+      {{ name: "AES-GCM", iv: wrapIv }}, wrappingKey, exportedKey
     );
 
     const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
@@ -48,30 +48,30 @@ _ENCRYPT_ACTION = r"""
         new TextEncoder().encode(conditionsJson)))
     ).map(b => b.toString(16).padStart(2, "0")).join("");
 
-    LitActions.setResponse({ response: JSON.stringify({
+    LitActions.setResponse({{ response: JSON.stringify({{
       ciphertext: toB64(cipherBuf),
       iv: toB64(iv),
       wrappedKey: toB64(wrappedKeyBuf),
       wrapIv: toB64(wrapIv),
       dataToEncryptHash: condHash,
       encryptedInTEE: true
-    }) });
-  } catch(e) {
-    LitActions.setResponse({ response: JSON.stringify({
+    }}) }});
+  }} catch(e) {{
+    LitActions.setResponse({{ response: JSON.stringify({{
       error: e.message, stack: e.stack
-    }) });
-  }
-})();
+    }}) }});
+  }}
+}})();
 """
 
-_DECRYPT_ACTION = r"""
-(async () => {
-  try {
-    const ciphertextB64 = jsParams.ciphertext;
-    const ivB64 = jsParams.iv;
-    const wrappedKeyB64 = jsParams.wrappedKey;
-    const wrapIvB64 = jsParams.wrapIv;
-    const wrappingKeyB64 = jsParams.wrappingKeyB64;
+_DECRYPT_TEMPLATE = """
+(async () => {{
+  try {{
+    const ciphertextB64 = {ct_json};
+    const ivB64 = {iv_json};
+    const wrappedKeyB64 = {wk_json};
+    const wrapIvB64 = {wiv_json};
+    const wrappingKeyB64 = {wrapping_key_json};
 
     const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
@@ -83,7 +83,7 @@ _DECRYPT_ACTION = r"""
     const wrappedKey = fromB64(wrappedKeyB64);
     const wrapIv = fromB64(wrapIvB64);
     const unwrappedKeyBuf = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: wrapIv }, wrappingKey, wrappedKey
+      {{ name: "AES-GCM", iv: wrapIv }}, wrappingKey, wrappedKey
     );
 
     const dataKey = await crypto.subtle.importKey(
@@ -93,20 +93,20 @@ _DECRYPT_ACTION = r"""
     const ciphertext = fromB64(ciphertextB64);
     const iv = fromB64(ivB64);
     const plainBuf = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv }, dataKey, ciphertext
+      {{ name: "AES-GCM", iv }}, dataKey, ciphertext
     );
 
     const plaintext = new TextDecoder().decode(plainBuf);
 
-    LitActions.setResponse({ response: JSON.stringify({
+    LitActions.setResponse({{ response: JSON.stringify({{
       decryptedString: plaintext
-    }) });
-  } catch(e) {
-    LitActions.setResponse({ response: JSON.stringify({
+    }}) }});
+  }} catch(e) {{
+    LitActions.setResponse({{ response: JSON.stringify({{
       error: e.message, stack: e.stack
-    }) });
-  }
-})();
+    }}) }});
+  }}
+}})();
 """
 
 
@@ -122,19 +122,21 @@ def _get_api_key() -> str:
 
 
 def _derive_wrapping_key(api_key: str, conditions_json: str) -> str:
-    raw = hashlib.sha256(
-        (api_key + "::" + conditions_json).encode("utf-8")
+    raw = hmac.new(
+        api_key.encode("utf-8"),
+        conditions_json.encode("utf-8"),
+        hashlib.sha256,
     ).digest()
     return base64.b64encode(raw).decode("utf-8")
 
 
-def _run_lit_action(code: str, js_params: dict) -> dict:
+def _run_lit_action(code: str) -> dict:
     api_key = _get_api_key()
     url = f"{LIT_API_BASE}/lit_action"
 
     payload = {
         "code": code,
-        "js_params": js_params,
+        "js_params": None,
     }
 
     resp = requests.post(
@@ -176,12 +178,16 @@ def _run_lit_action(code: str, js_params: dict) -> dict:
 
 
 def get_lit_action_hash() -> str:
-    code_hash = hashlib.sha256(_ENCRYPT_ACTION.encode("utf-8")).hexdigest()
+    code_hash = hashlib.sha256(_ENCRYPT_TEMPLATE.encode("utf-8")).hexdigest()
     return code_hash
 
 
 def get_lit_action_code() -> str:
-    return _ENCRYPT_ACTION
+    return _ENCRYPT_TEMPLATE
+
+
+def _hash_executed_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
 def encrypt_private_key(
@@ -197,13 +203,15 @@ def encrypt_private_key(
     conditions_json = json.dumps(sol_rpc_conditions, sort_keys=True)
     wrapping_key_b64 = _derive_wrapping_key(api_key, conditions_json)
 
+    code = _ENCRYPT_TEMPLATE.format(
+        data_json=json.dumps(privkey_b58),
+        cond_json=json.dumps(conditions_json),
+        wrapping_key_json=json.dumps(wrapping_key_b64),
+    )
+
     logger.info("Encrypting private key for %s via Chipotle TEE...", vanity_address)
 
-    result = _run_lit_action(_ENCRYPT_ACTION, {
-        "dataToEncrypt": privkey_b58,
-        "conditionsJson": conditions_json,
-        "wrappingKeyB64": wrapping_key_b64,
-    })
+    result = _run_lit_action(code)
 
     ciphertext = result.get("ciphertext", "")
     data_hash = result.get("dataToEncryptHash", "")
@@ -223,11 +231,8 @@ def encrypt_private_key(
         "solRpcConditions": sol_rpc_conditions,
         "encryptedInTEE": True,
         "litNetwork": "chipotle-dev",
+        "litActionHash": _hash_executed_code(code),
     }
-
-    action_hash = get_lit_action_hash()
-    if action_hash:
-        package["litActionHash"] = action_hash
 
     logger.info("Encryption successful for %s (hash: %s)", vanity_address, data_hash[:16])
     return package
@@ -254,15 +259,17 @@ def decrypt_private_key(
     conditions_json = json.dumps(conditions, sort_keys=True)
     wrapping_key_b64 = _derive_wrapping_key(api_key, conditions_json)
 
+    code = _DECRYPT_TEMPLATE.format(
+        ct_json=json.dumps(ciphertext),
+        iv_json=json.dumps(iv),
+        wk_json=json.dumps(wrapped_key),
+        wiv_json=json.dumps(wrap_iv),
+        wrapping_key_json=json.dumps(wrapping_key_b64),
+    )
+
     logger.info("Decrypting via Chipotle TEE...")
 
-    result = _run_lit_action(_DECRYPT_ACTION, {
-        "ciphertext": ciphertext,
-        "iv": iv,
-        "wrappedKey": wrapped_key,
-        "wrapIv": wrap_iv,
-        "wrappingKeyB64": wrapping_key_b64,
-    })
+    result = _run_lit_action(code)
 
     plaintext = result.get("decryptedString", "")
     if not plaintext:
