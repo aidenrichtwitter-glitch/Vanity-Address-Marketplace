@@ -15,7 +15,8 @@ def _get_lit_client():
     with _lit_lock:
         if _lit_client is None:
             from lit_python_sdk import LitClient
-            _lit_client = LitClient(network=LIT_NETWORK)
+            _lit_client = LitClient()
+            _lit_client.new(lit_network=LIT_NETWORK)
             _lit_client.connect()
             logger.info("Lit Protocol client connected (network: %s)", LIT_NETWORK)
         return _lit_client
@@ -32,10 +33,9 @@ def encrypt_private_key(
     lit = _get_lit_client()
 
     with _lit_lock:
-        encrypted = lit.encrypt(
-            data=privkey_b58,
+        encrypted = lit.encrypt_string(
+            data_to_encrypt=privkey_b58,
             access_control_conditions=access_conditions,
-            chain="solanaDevnet",
         )
 
     ciphertext = encrypted["ciphertext"]
@@ -54,6 +54,7 @@ def encrypt_private_key(
 def decrypt_private_key(
     encrypted_json: dict,
     auth_sig: Optional[dict] = None,
+    session_sigs: Optional[dict] = None,
 ) -> str:
     lit = _get_lit_client()
 
@@ -69,12 +70,19 @@ def decrypt_private_key(
         "access_control_conditions": conditions,
         "chain": "solanaDevnet",
     }
+    if session_sigs:
+        decrypt_kwargs["session_sigs"] = session_sigs
     if auth_sig:
         decrypt_kwargs["auth_sig"] = auth_sig
 
     with _lit_lock:
-        result = lit.decrypt(**decrypt_kwargs)
+        result = lit.decrypt_string(**decrypt_kwargs)
 
+    if isinstance(result, dict) and "decryptedString" in result:
+        raw = result["decryptedString"]
+        if isinstance(raw, (bytes, bytearray)):
+            return raw.decode("utf-8")
+        return str(raw)
     if isinstance(result, dict) and "decryptedData" in result:
         raw = result["decryptedData"]
         if isinstance(raw, (bytes, bytearray)):

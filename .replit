@@ -1,4 +1,4 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "nodejs-20"]
 [agent]
 expertMode = true
 
@@ -28,3 +28,7 @@ args = "python gui.py"
 
 [workflows.workflow.metadata]
 outputType = "vnc"
+
+[[ports]]
+localPort = 3092
+externalPort = 80
