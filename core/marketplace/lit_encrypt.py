@@ -60,12 +60,35 @@ def _patch_bundled_server():
     if not orig_path.exists():
         return None
 
+    _PATCH_VERSION = "2"
     patched_path = Path(tempfile.gettempdir()) / "lit_bundled_server_patched.js"
+    marker_path = Path(tempfile.gettempdir()) / "lit_patch_version.txt"
 
-    if patched_path.exists() and patched_path.stat().st_mtime >= orig_path.stat().st_mtime:
+    cached_version = ""
+    if marker_path.exists():
+        cached_version = marker_path.read_text(encoding="utf-8").strip()
+    if (patched_path.exists()
+            and patched_path.stat().st_mtime >= orig_path.stat().st_mtime
+            and cached_version == _PATCH_VERSION):
         return patched_path
 
     original = orig_path.read_text(encoding="utf-8")
+
+    local_storage_polyfill = (
+        "if (typeof globalThis.localStorage === 'undefined') {\n"
+        "  const _store = new Map();\n"
+        "  globalThis.localStorage = {\n"
+        "    getItem(k) { return _store.has(k) ? _store.get(k) : null; },\n"
+        "    setItem(k, v) { _store.set(k, String(v)); },\n"
+        "    removeItem(k) { _store.delete(k); },\n"
+        "    clear() { _store.clear(); },\n"
+        "    get length() { return _store.size; },\n"
+        "    key(i) { return [..._store.keys()][i] || null; }\n"
+        "  };\n"
+        "}\n\n"
+    )
+
+    patched = local_storage_polyfill + original
 
     old_listen = (
         'app.listen(port, async () => {\n'
@@ -86,14 +109,15 @@ def _patch_bundled_server():
         '});'
     )
 
-    if old_listen in original:
-        patched = original.replace(old_listen, new_listen)
+    if old_listen in patched:
+        patched = patched.replace(old_listen, new_listen)
         logger.info("Patched bundled_server.js: changed DatilDev -> datil")
     else:
-        patched = original
-        logger.warning("Could not find auto-connect block in bundled_server.js — using original")
+        logger.warning("Could not find auto-connect block in bundled_server.js — using original network")
 
+    logger.info("Patched bundled_server.js: injected localStorage polyfill")
     patched_path.write_text(patched, encoding="utf-8")
+    marker_path.write_text(_PATCH_VERSION, encoding="utf-8")
     return patched_path
 
 

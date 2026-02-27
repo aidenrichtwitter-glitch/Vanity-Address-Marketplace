@@ -39,7 +39,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
-  - `lit_encrypt.py` - Lit Protocol encryption/decryption using `solRpcConditions`; MUST use `datil` network (NOT `datil-dev` or `DatilDev` — only `datil` works); auto-patches `bundled_server.js` to remove hardcoded DatilDev auto-connect that crashes the Node.js sidecar; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
+  - `lit_encrypt.py` - Lit Protocol encryption/decryption using `solRpcConditions`; MUST use `datil` network (NOT `datil-dev` or `DatilDev` — only `datil` works); auto-patches `bundled_server.js` to: (1) remove hardcoded DatilDev auto-connect that crashes the Node.js sidecar, (2) inject `localStorage` polyfill (Node.js lacks browser localStorage, which Lit SDK v7 needs for SEV-SNP attestation cert caching); patch versioned via marker file to force re-patch on updates; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
   - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
