@@ -60,7 +60,7 @@ def _patch_bundled_server():
     if not orig_path.exists():
         return None
 
-    _PATCH_VERSION = "2"
+    _PATCH_VERSION = "3"
     patched_path = Path(tempfile.gettempdir()) / "lit_bundled_server_patched.js"
     marker_path = Path(tempfile.gettempdir()) / "lit_patch_version.txt"
 
@@ -75,17 +75,21 @@ def _patch_bundled_server():
     original = orig_path.read_text(encoding="utf-8")
 
     local_storage_polyfill = (
-        "if (typeof globalThis.localStorage === 'undefined') {\n"
-        "  const _store = new Map();\n"
-        "  globalThis.localStorage = {\n"
-        "    getItem(k) { return _store.has(k) ? _store.get(k) : null; },\n"
-        "    setItem(k, v) { _store.set(k, String(v)); },\n"
-        "    removeItem(k) { _store.delete(k); },\n"
-        "    clear() { _store.clear(); },\n"
-        "    get length() { return _store.size; },\n"
-        "    key(i) { return [..._store.keys()][i] || null; }\n"
-        "  };\n"
-        "}\n\n"
+        "(function() {\n"
+        "  var needsPoly = typeof globalThis.localStorage === 'undefined'\n"
+        "    || typeof globalThis.localStorage.getItem !== 'function';\n"
+        "  if (needsPoly) {\n"
+        "    var _store = new Map();\n"
+        "    globalThis.localStorage = {\n"
+        "      getItem: function(k) { return _store.has(k) ? _store.get(k) : null; },\n"
+        "      setItem: function(k, v) { _store.set(k, String(v)); },\n"
+        "      removeItem: function(k) { _store.delete(k); },\n"
+        "      clear: function() { _store.clear(); },\n"
+        "      get length() { return _store.size; },\n"
+        "      key: function(i) { return Array.from(_store.keys())[i] || null; }\n"
+        "    };\n"
+        "  }\n"
+        "})();\n\n"
     )
 
     patched = local_storage_polyfill + original

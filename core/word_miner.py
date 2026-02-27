@@ -120,6 +120,13 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
 
         target = max_temp - 2
 
+        def _send(data):
+            try:
+                conn.send(data)
+                return True
+            except (BrokenPipeError, OSError):
+                return False
+
         while True:
             if conn.poll(0):
                 msg = conn.recv()
@@ -130,7 +137,8 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
             iterations += 1
 
             if result[0]:
-                conn.send({"type": "found", "data": list(result)})
+                if not _send({"type": "found", "data": list(result)}):
+                    break
                 searcher.setting.key32 = searcher.setting.generate_key32()
 
             now = time.time()
@@ -138,7 +146,8 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
                 last_temp_check = now
                 temp = _get_temp()
                 if temp is not None:
-                    conn.send({"type": "temp", "value": temp})
+                    if not _send({"type": "temp", "value": temp}):
+                        break
 
                     error = temp - target
                     error_integral = max(0.0, min(error_integral + error, 50.0))
@@ -157,10 +166,12 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
 
                     if error >= 0 and last_logged_state != "throttled":
                         last_logged_state = "throttled"
-                        conn.send({"type": "log", "msg": f"Thermal control active: {temp}°C → targeting {target}°C (delay {thermal_delay:.3f}s)"})
+                        if not _send({"type": "log", "msg": f"Thermal control active: {temp}°C → targeting {target}°C (delay {thermal_delay:.3f}s)"}):
+                            break
                     elif error < -3 and thermal_delay < 0.001 and last_logged_state != "clear":
                         last_logged_state = "clear"
-                        conn.send({"type": "log", "msg": f"Thermal control off: {temp}°C (target {target}°C)"})
+                        if not _send({"type": "log", "msg": f"Thermal control off: {temp}°C (target {target}°C)"}):
+                            break
 
             sleep_time = max(base_delay, thermal_delay)
             if sleep_time > 0:
@@ -172,7 +183,8 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
                 elapsed = now2 - batch_start
                 if elapsed > 0:
                     speed = (iterations * batch_keys) / elapsed
-                    conn.send({"type": "speed", "value": speed})
+                    if not _send({"type": "speed", "value": speed}):
+                        break
                 iterations = 0
                 batch_start = now2
 
