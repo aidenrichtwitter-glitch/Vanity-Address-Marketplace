@@ -1,3 +1,9 @@
+#if defined(__OPENCL_C_VERSION__) && __OPENCL_C_VERSION__ >= 200
+#define ADDR_GENERIC __generic
+#else
+#define ADDR_GENERIC
+#endif
+
 #ifndef NULL
 #define NULL 0L
 #endif
@@ -74,7 +80,7 @@ typedef struct __attribute__((aligned(32))) {
 */
 
 inline __attribute__((always_inline))
-void fe_0(fe h) {
+void fe_0(ADDR_GENERIC fe h) {
   h[0] = 0;
   h[1] = 0;
   h[2] = 0;
@@ -2204,7 +2210,7 @@ constant ge_precomp base[32][8] = {
 };
 
 inline __attribute__((always_inline))
-void fe_mul(fe h, const fe f, const fe g) {
+void fe_mul(ADDR_GENERIC fe h, const ADDR_GENERIC fe f, const ADDR_GENERIC fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2426,7 +2432,7 @@ void fe_mul(fe h, const fe f, const fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_sub(fe h, const fe f, const fe g) {
+void fe_sub(ADDR_GENERIC fe h, const ADDR_GENERIC fe f, const ADDR_GENERIC fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2471,7 +2477,7 @@ void fe_sub(fe h, const fe f, const fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_add(fe h, const fe f, const fe g) {
+void fe_add(ADDR_GENERIC fe h, const ADDR_GENERIC fe f, const ADDR_GENERIC fe g) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2516,7 +2522,7 @@ void fe_add(fe h, const fe f, const fe g) {
 }
 
 inline __attribute__((always_inline))
-void fe_tobytes(unsigned char *s, const fe h) {
+void fe_tobytes(unsigned char *s, const ADDR_GENERIC fe h) {
   int32_t h0 = h[0];
   int32_t h1 = h[1];
   int32_t h2 = h[2];
@@ -2624,7 +2630,7 @@ void fe_tobytes(unsigned char *s, const fe h) {
 }
 
 inline __attribute__((always_inline))
-void fe_1(fe h) {
+void fe_1(ADDR_GENERIC fe h) {
   h[0] = 1;
   h[1] = 0;
   h[2] = 0;
@@ -2656,7 +2662,7 @@ void fe_1(fe h) {
     Preconditions: b in {0,1}.
 */
 inline __attribute__((always_inline))
-void fe_cmov__constant(fe f, constant fe g, unsigned int b) {
+void fe_cmov__constant(ADDR_GENERIC fe f, constant fe g, unsigned int b) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2713,7 +2719,7 @@ void fe_cmov__constant(fe f, constant fe g, unsigned int b) {
 }
 
 inline __attribute__((always_inline))
-void fe_cmov(fe f, const fe g, unsigned int b) {
+void fe_cmov(ADDR_GENERIC fe f, const ADDR_GENERIC fe g, unsigned int b) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2770,7 +2776,7 @@ void fe_cmov(fe f, const fe g, unsigned int b) {
 }
 
 inline __attribute__((always_inline))
-void fe_sq(fe h, const fe f) {
+void fe_sq(ADDR_GENERIC fe h, const ADDR_GENERIC fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2922,7 +2928,7 @@ void fe_sq(fe h, const fe f) {
 */
 
 inline __attribute__((always_inline))
-void fe_copy(fe h, const fe f) {
+void fe_copy(ADDR_GENERIC fe h, const ADDR_GENERIC fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -2947,7 +2953,7 @@ void fe_copy(fe h, const fe f) {
 }
 
 inline __attribute__((always_inline))
-void fe_invert(fe out, const fe z) {
+void fe_invert(ADDR_GENERIC fe out, const ADDR_GENERIC fe z) {
   fe t0;
   fe t1;
   fe t2;
@@ -3034,7 +3040,7 @@ void fe_invert(fe out, const fe z) {
 */
 
 inline __attribute__((always_inline))
-int fe_isnegative(const fe f) {
+int fe_isnegative(const ADDR_GENERIC fe f) {
   unsigned char s[32];
 
   fe_tobytes(s, f);
@@ -3085,7 +3091,7 @@ Postconditions:
 */
 
 inline __attribute__((always_inline))
-void fe_neg(fe h, const fe f) {
+void fe_neg(ADDR_GENERIC fe h, const ADDR_GENERIC fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];
@@ -3150,7 +3156,7 @@ See fe_mul.c for discussion of implementation strategy.
 */
 
 inline __attribute__((always_inline))
-void fe_sq2(fe h, const fe f) {
+void fe_sq2(ADDR_GENERIC fe h, const ADDR_GENERIC fe f) {
   int32_t f0 = f[0];
   int32_t f1 = f[1];
   int32_t f2 = f[2];

@@ -270,12 +270,23 @@ class MiningThread(threading.Thread):
                 proc.start()
                 workers.append((proc, p_conn))
 
+            ready_count = 0
             for _, conn in workers:
-                msg = conn.recv()
-                if isinstance(msg, dict) and msg.get("type") == "ready":
-                    pass
+                try:
+                    msg = conn.recv()
+                    if isinstance(msg, dict) and msg.get("type") == "ready":
+                        ready_count += 1
+                    elif isinstance(msg, dict) and msg.get("type") == "error":
+                        self.signals.log.emit(f"[GPU ERROR] {msg.get('msg', 'Worker failed to start')}")
+                except Exception as e:
+                    self.signals.log.emit(f"[GPU ERROR] Worker connection failed: {e}")
 
-            self.signals.log.emit(f"Workers running ({gpu_counts} GPU process(es)), mining continuously...")
+            if ready_count == 0:
+                self.signals.error.emit("No GPU workers started — kernel build failed. Check log for details.")
+                self.signals.stopped.emit()
+                return
+
+            self.signals.log.emit(f"Workers running ({ready_count}/{gpu_counts} GPU process(es)), mining continuously...")
 
             while not self._stop_event.is_set():
                 if 0 < self.count <= result_count:
