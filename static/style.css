@@ -408,6 +408,7 @@ tr.selected {
 }
 
 .addr-cell { color: #64e678; }
+.word-cell { color: #c8b4ff; font-weight: bold; }
 .suffix-cell { color: #fad246; }
 .time-cell { color: #a0aaf0; }
 .mint-cell { color: #a0aaf0; }

@@ -157,7 +157,7 @@ def mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
                         broadcast_event("log", {"msg": f"[FOUND] #{result_count}: {pubkey} -> {suffix_display}"})
 
                         if mining_mode == "blind" and blind_wallet:
-                            _handle_blind_upload(pv_bytes, pubkey, blind_wallet)
+                            _handle_blind_upload(pv_bytes, pubkey, blind_wallet, suffix_display)
 
                     elif msg["type"] == "speed":
                         speed = msg["value"]
@@ -199,7 +199,7 @@ def mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
     broadcast_event("stopped", {})
 
 
-def _handle_blind_upload(pv_bytes, pubkey, wallet):
+def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
     def _upload():
         try:
             import base58 as b58_mod
@@ -224,6 +224,8 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet):
             )
             encrypted_json["mintAddress"] = mint_address
             encrypted_json["sellerAddress"] = str(seller_kp.pubkey())
+            if vanity_word:
+                encrypted_json["vanityWord"] = vanity_word
 
             vanity_pubkey = Pubkey.from_string(pubkey)
             result = upload_package(

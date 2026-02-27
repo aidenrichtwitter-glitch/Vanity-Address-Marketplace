@@ -171,7 +171,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 
 class MiningSignals(QObject):
     found = Signal(str, str, str, int)
-    found_with_key = Signal(str, bytes)
+    found_with_key = Signal(str, bytes, str)
     log = Signal(str)
     status = Signal(str)
     speed = Signal(float)
@@ -287,7 +287,7 @@ class MiningThread(threading.Thread):
                             self.signals.found.emit(
                                 pubkey, suffix_display, f"{elapsed:.1f}s", result_count,
                             )
-                            self.signals.found_with_key.emit(pubkey, pv_bytes)
+                            self.signals.found_with_key.emit(pubkey, pv_bytes, suffix_display)
                             self.signals.log.emit(
                                 f"[FOUND] #{result_count}: {pubkey} -> {suffix_display}"
                             )
@@ -878,13 +878,14 @@ class MainWindow(QMainWindow):
         search_row.addStretch()
         buyer_layout.addLayout(search_row)
 
-        self.packages_table = QTableWidget(0, 5)
-        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "NFT Mint", "Price", "Status", "Verified"])
+        self.packages_table = QTableWidget(0, 6)
+        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "Word", "NFT Mint", "Price", "Status", "Verified"])
         self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.packages_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.packages_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.packages_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
         self.packages_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.packages_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.packages_table.setAlternatingRowColors(True)
@@ -1117,15 +1118,21 @@ class MainWindow(QMainWindow):
             addr_item.setForeground(QColor(100, 230, 120))
             self.packages_table.setItem(row, 0, addr_item)
 
-            mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "—")
+            enc_json = pkg.get("encrypted_json", {})
+            vanity_word = enc_json.get("vanityWord", "—")
+            word_item = QTableWidgetItem(vanity_word)
+            word_item.setForeground(QColor(200, 180, 255))
+            self.packages_table.setItem(row, 1, word_item)
+
+            mint_addr = enc_json.get("mintAddress", "—")
             mint_item = QTableWidgetItem(mint_addr)
             mint_item.setForeground(QColor(160, 170, 240))
-            self.packages_table.setItem(row, 1, mint_item)
+            self.packages_table.setItem(row, 2, mint_item)
 
             price = self._get_package_price(pkg)
             price_item = QTableWidgetItem(price)
             price_item.setForeground(QColor(250, 210, 70))
-            self.packages_table.setItem(row, 2, price_item)
+            self.packages_table.setItem(row, 3, price_item)
 
             nft_status = pkg.get("nft_status", "unknown")
             status_item = QTableWidgetItem(nft_status)
@@ -1135,9 +1142,8 @@ class MainWindow(QMainWindow):
                 status_item.setForeground(QColor(255, 80, 80))
             else:
                 status_item.setForeground(QColor(150, 150, 180))
-            self.packages_table.setItem(row, 3, status_item)
+            self.packages_table.setItem(row, 4, status_item)
 
-            enc_json = pkg.get("encrypted_json", {})
             pkg_hash = enc_json.get("litActionHash", "")
             tee_flag = enc_json.get("encryptedInTEE", False)
             if pkg_hash and tee_flag and pkg_hash == self._known_lit_action_hash:
@@ -1149,7 +1155,7 @@ class MainWindow(QMainWindow):
             else:
                 verified_item = QTableWidgetItem("Unverified")
                 verified_item.setForeground(QColor(255, 80, 80))
-            self.packages_table.setItem(row, 4, verified_item)
+            self.packages_table.setItem(row, 5, verified_item)
 
     def _on_browse_error(self, err):
         self.browse_packages_btn.setEnabled(True)
@@ -1263,7 +1269,7 @@ class MainWindow(QMainWindow):
                 self._packages_data[row]["nft_status"] = "BURNED"
                 status_item = QTableWidgetItem("BURNED")
                 status_item.setForeground(QColor(255, 80, 80))
-                self.packages_table.setItem(row, 3, status_item)
+                self.packages_table.setItem(row, 4, status_item)
                 self.buy_btn.setText(f"SOLD — already burned")
                 self.buy_btn.setEnabled(False)
 
@@ -1273,7 +1279,7 @@ class MainWindow(QMainWindow):
         self.decrypt_status_label.setStyleSheet("color: #ff5050; font-size: 11px; background: transparent;")
         self._mp_log(f"Burn error: {err}")
 
-    def _on_found_with_key(self, pubkey: str, pv_bytes: bytes):
+    def _on_found_with_key(self, pubkey: str, pv_bytes: bytes, vanity_word: str = ""):
         if self._mining_mode != "blind":
             return
 
@@ -1309,6 +1315,8 @@ class MainWindow(QMainWindow):
 
                 encrypted_json["mintAddress"] = mint_address
                 encrypted_json["sellerAddress"] = str(seller_kp.pubkey())
+                if vanity_word:
+                    encrypted_json["vanityWord"] = vanity_word
 
                 vanity_pubkey = Pubkey.from_string(pubkey)
 
