@@ -305,15 +305,33 @@ def api_status():
         })
 
 
+def _parse_wordlist_input(raw):
+    if not raw or not raw.strip():
+        return None, None
+    val = raw.strip()
+    if os.path.isfile(val):
+        return val, None
+    words = [w.strip().lower() for w in val.replace(",", " ").split() if w.strip()]
+    if words:
+        return None, words
+    return None, None
+
+
 @app.route("/api/wordcount", methods=["POST"])
 def api_wordcount():
     data = request.json or {}
     min_length = data.get("min_length", 4)
-    wordlist_file = data.get("wordlist_file", "") or None
+    raw_wordlist = data.get("wordlist_file", "") or ""
+    wordlist_file, custom_words = _parse_wordlist_input(raw_wordlist)
     try:
-        wf = WordFilter(min_length=min_length, wordlist_file=wordlist_file)
+        wf = WordFilter(min_length=min_length, wordlist_file=wordlist_file, custom_words=custom_words)
         patterns = build_suffix_patterns(wf)
-        source = "custom file" if wordlist_file else "built-in"
+        if custom_words:
+            source = "inline words"
+        elif wordlist_file:
+            source = "custom file"
+        else:
+            source = "built-in"
         return jsonify({
             "words": len(wf.words),
             "patterns": len(patterns),
@@ -333,19 +351,25 @@ def api_start():
     data = request.json or {}
     min_length = data.get("min_length", 4)
     output_dir = data.get("output_dir", "./found_words")
-    wordlist_file = data.get("wordlist_file", "") or None
+    raw_wordlist = data.get("wordlist_file", "") or ""
+    wordlist_file, custom_words = _parse_wordlist_input(raw_wordlist)
     power_pct = data.get("power_pct", 100)
     max_temp = data.get("max_temp", 80)
     mining_mode = data.get("mining_mode", "mine")
     blind_wallet = data.get("blind_wallet", "")
 
     try:
-        word_filter = WordFilter(min_length=min_length, wordlist_file=wordlist_file)
+        word_filter = WordFilter(min_length=min_length, wordlist_file=wordlist_file, custom_words=custom_words)
         suffix_patterns = build_suffix_patterns(word_filter)
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
-    source = f"from {wordlist_file}" if wordlist_file else "from built-in list"
+    if custom_words:
+        source = f"inline: {', '.join(custom_words)}"
+    elif wordlist_file:
+        source = f"from {wordlist_file}"
+    else:
+        source = "from built-in list"
     broadcast_event("log", {"msg": f"Loaded {len(word_filter.words)} words ({source}), {len(suffix_patterns)} suffix patterns"})
     pad_example = "X" * max(0, TAIL_SIZE - min_length)
     broadcast_event("log", {"msg": f"Tail pattern: {pad_example}<word> (last {TAIL_SIZE} chars of address)"})

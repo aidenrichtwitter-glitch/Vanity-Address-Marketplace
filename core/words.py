@@ -253,7 +253,14 @@ def _get_default_wordlist_path():
 
 
 def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file=None):
-    if wordlist_file:
+    if custom_words:
+        words = list(custom_words)
+        extras = []
+        for w in words:
+            if "l" in w:
+                extras.append(w.replace("l", "1"))
+        words.extend(extras)
+    elif wordlist_file:
         words = load_words_from_file(wordlist_file)
     else:
         default_path = _get_default_wordlist_path()
@@ -261,8 +268,6 @@ def get_valid_words(min_length=3, max_length=0, custom_words=None, wordlist_file
             words = load_words_from_file(default_path)
         else:
             words = list(COOL_WORDS)
-    if custom_words:
-        words = words + custom_words
     valid = set()
     for word in words:
         if all(c in BASE58_CHARS for c in word) and len(word) >= min_length:

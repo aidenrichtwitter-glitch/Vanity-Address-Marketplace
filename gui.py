@@ -513,7 +513,7 @@ class MainWindow(QMainWindow):
         wl_row = QHBoxLayout()
         wl_row.setSpacing(4)
         self.wordlist_edit = QLineEdit("")
-        self.wordlist_edit.setPlaceholderText("Default: wordlist_3000.txt (3000 common words)")
+        self.wordlist_edit.setPlaceholderText("Type words (e.g. dragon, gold) or Browse for a .txt file")
         self.wordlist_edit.textChanged.connect(self._load_word_count)
         wl_row.addWidget(self.wordlist_edit)
         browse_wl_btn = QPushButton("Browse")
@@ -978,7 +978,15 @@ class MainWindow(QMainWindow):
                     key_text = f.read().strip()
                 for line in key_text.splitlines():
                     line = line.strip()
-                    if line and not line.startswith("#") and len(line) >= 32:
+                    if line.lower().startswith("private key:"):
+                        key_val = line.split(":", 1)[1].strip()
+                        if key_val:
+                            self.seller_wallet_edit.setText(key_val)
+                            self._mp_log(f"Loaded seller key from {os.path.basename(path)}")
+                            return
+                for line in key_text.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and not line.lower().startswith("address") and len(line) >= 32:
                         self.seller_wallet_edit.setText(line)
                         self._mp_log(f"Loaded seller key from {os.path.basename(path)}")
                         return
@@ -1016,12 +1024,25 @@ class MainWindow(QMainWindow):
             self.buyer_wallet_edit.setEchoMode(QLineEdit.Password)
 
     def _load_buyer_key_file(self):
-        f, _ = QFileDialog.getOpenFileName(self, "Load Buyer Key File", "", "All Files (*)")
+        f, _ = QFileDialog.getOpenFileName(self, "Load Buyer Key File", "", "Text Files (*.txt *.key);;All Files (*)")
         if f:
             try:
-                text = Path(f).read_text().strip()
-                self.buyer_wallet_edit.setText(text)
-                self._mp_log(f"Loaded buyer key from {f}")
+                key_text = Path(f).read_text().strip()
+                for line in key_text.splitlines():
+                    line = line.strip()
+                    if line.lower().startswith("private key:"):
+                        key_val = line.split(":", 1)[1].strip()
+                        if key_val:
+                            self.buyer_wallet_edit.setText(key_val)
+                            self._mp_log(f"Loaded buyer key from {os.path.basename(f)}")
+                            return
+                for line in key_text.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and not line.lower().startswith("address") and len(line) >= 32:
+                        self.buyer_wallet_edit.setText(line)
+                        self._mp_log(f"Loaded buyer key from {os.path.basename(f)}")
+                        return
+                self._mp_log("No valid key found in file.")
             except Exception as e:
                 self._mp_log(f"Failed to load buyer key: {e}")
 
@@ -1353,15 +1374,34 @@ class MainWindow(QMainWindow):
     def _load_word_count(self):
         self._word_count_timer.start(400)
 
+    @staticmethod
+    def _parse_wordlist_input(raw):
+        if not raw or not raw.strip():
+            return None, None
+        val = raw.strip()
+        if os.path.isfile(val):
+            return val, None
+        words = [w.strip().lower() for w in val.replace(",", " ").split() if w.strip()]
+        if words:
+            return None, words
+        return None, None
+
     def _do_load_word_count(self):
         try:
-            wl_file = self.wordlist_edit.text().strip() or None
+            raw = self.wordlist_edit.text().strip()
+            wl_file, custom_words = self._parse_wordlist_input(raw)
             wf = WordFilter(
                 min_length=self.min_word_spin.value(),
                 wordlist_file=wl_file,
+                custom_words=custom_words,
             )
             patterns = build_suffix_patterns(wf)
-            source = "custom file" if wl_file else "built-in"
+            if custom_words:
+                source = "inline words"
+            elif wl_file:
+                source = "custom file"
+            else:
+                source = "built-in"
             self.words_label.setText(f"Words: {len(wf.words)}  |  Patterns: {len(patterns)}  ({source})")
         except Exception as e:
             self.words_label.setText(f"Words: error ({e})")
@@ -1446,12 +1486,18 @@ class MainWindow(QMainWindow):
 
         min_len = self.min_word_spin.value()
         output_dir = self.output_dir_edit.text()
-        wl_file = self.wordlist_edit.text().strip() or None
+        raw = self.wordlist_edit.text().strip()
+        wl_file, custom_words = self._parse_wordlist_input(raw)
 
-        word_filter = WordFilter(min_length=min_len, wordlist_file=wl_file)
+        word_filter = WordFilter(min_length=min_len, wordlist_file=wl_file, custom_words=custom_words)
         suffix_patterns = build_suffix_patterns(word_filter)
 
-        source = f"from {wl_file}" if wl_file else "from built-in list"
+        if custom_words:
+            source = f"inline: {', '.join(custom_words)}"
+        elif wl_file:
+            source = f"from {wl_file}"
+        else:
+            source = "from built-in list"
         self._on_log(f"Loaded {len(word_filter.words)} words ({source}), {len(suffix_patterns)} suffix patterns")
         pad_example = "X" * max(0, TAIL_SIZE - min_len)
         self._on_log(f"Tail pattern: {pad_example}<word> (last {TAIL_SIZE} chars of address)")

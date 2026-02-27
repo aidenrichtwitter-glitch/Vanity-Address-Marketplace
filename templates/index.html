@@ -37,7 +37,7 @@
                 <div class="field grow">
                     <span class="field-label" id="wordlistLabel">Word List (optional - uses built-in list if empty)</span>
                     <div style="display:flex; gap:6px; align-items:center">
-                        <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()" style="flex:1; min-width:0">
+                        <input type="text" id="wordlistFile" placeholder="Type words (e.g. dragon, gold) or Browse for a .txt file" onchange="loadWordCount()" oninput="loadWordCount()" style="flex:1; min-width:0">
                         <input type="file" id="wordlistUpload" accept=".txt" style="display:none" onchange="handleWordlistUpload(this)">
                         <button class="btn btn-secondary" id="wordlistBrowseBtn" onclick="document.getElementById('wordlistUpload').click()" style="flex-shrink:0">Browse</button>
                         <button class="btn btn-secondary" id="wordlistClearBtn" onclick="clearWordlist()" style="flex-shrink:0">Clear</button>
