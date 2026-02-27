@@ -1,0 +1,70 @@
+Here’s a clean, comprehensive overview of everything we’ve built, iterated on, and fixed so far in this project. You can copy-paste this entire block into a new conversation/instance to give full context quickly.
+
+---
+
+**Project Overview: Blind Vanity Address Marketplace on Solana Devnet**  
+**Goal**: Create a system where users blindly grind Solana vanity keypairs, encrypt the private key with Lit Protocol (using 'datil' network only — 'datil-dev' is unreliable and avoided), upload the encrypted package + metadata to a deterministic PDA on devnet, and allow other users to buy/discover these PDAs and decrypt the privkey if they meet access conditions (e.g. wallet balance >0 SOL).
+
+**Current Status (as of Feb 23, 2026)**  
+- Core grinding loop works (finds vanity addresses fast, e.g. ending in "sol").
+- Lit encryption fully functional on 'datil' with real wallet authSig and solRpc condition (`getBalance > 0`).
+- On-chain program deployed and upgraded multiple times.
+- Upload now succeeds via raw tx builder (bypassing Anchor TS client bugs).
+- Latest successful upload tx: `3uPs6WXnMygRcJhNUGbgLyf6zQoQcGp7x6wiNmJij2zeNH7r9kxqhWQXtVpiaZg6bMFV3dkLGZh6uuLqcfFxDp72`  
+  - PDA created: `4JRik3Sah1ESsxmsCHbag6pTVD6wEpRKRScg8PeUHiYy` (or similar in latest run)
+  - Data written: encrypted JSON (~228-byte ciphertext + hash + vanity address + conditions)
+  - Issue: Devnet RPC lag — PDA visible on explorer after 30–120 seconds, not instantly.
+
+**Files & Components**
+
+1. **Rust Program** (`programs/blind_vanity/src/lib.rs`)
+   - Program ID: `EHS97x7xVo4svEVrEsVnihXgPLozCFs1BH7Bnkuf2nP6` (latest deployed)
+   - Instruction: `upload_vanity_package(vanity_pubkey: Pubkey, encrypted_json: Vec<u8>)`
+   - Account: `VanityPackage` with fields:
+     - vanity_pubkey: Pubkey
+     - encrypted_json: Vec<u8>
+     - authority: Pubkey
+     - bump: u8
+   - Uses `init_if_needed` + `realloc` to grow account to exact size needed (avoids OOM panic).
+   - Anchor.toml & Cargo.toml configured for devnet + idl-build.
+
+2. **Frontend/Grinder Script** (`blind_grinder.js`)
+   - Grinds vanity addresses (case-insensitive, suffix-based)
+   - Encrypts privkey with Lit 'datil' using `solRpcConditions` (`getBalance > 0`)
+   - Builds raw transaction (no `Program` constructor — avoids `undefined 'size'` error)
+   - Uses BorshInstructionCoder + raw discriminator from IDL
+   - Sends tx, confirms, waits 6s, checks account info (with retry logic suggested)
+   - Has discover mode (`getProgramAccounts`) to list all packages
+   - Dependencies: `@solana/web3.js`, `bs58`, `tweetnacl`, `prompt-sync`, `@lit-protocol/lit-node-client`, `@coral-xyz/anchor`
+
+3. **Claim/Decrypt Script** (`claim.js`)
+   - Fetches PDA data
+   - Parses JSON blob (ciphertext, dataToEncryptHash, vanityAddress, conditions)
+   - Decrypts with Lit using buyer wallet authSig
+   - Prints vanity address + private key if successful
+
+**Key Fixes & Lessons Learned**
+- Lit: Use `dataToEncrypt: Uint8Array` (not string) to avoid SubtleCrypto digest errors in Node.
+- Anchor TS client: Avoided `new Program()` due to persistent `undefined 'size'` bug on `VanityPackage` account resolution — switched to raw `TransactionInstruction` + `BorshInstructionCoder`.
+- Discriminator: IDL stores it as byte array → `Buffer.from(ixDef.discriminator)` (no bs58 decode needed).
+- Encoding: `coder.encode('upload_vanity_package', { vanity_pubkey: ..., encrypted_json: ... })` — string method name + args object.
+- Vec<u8>: Must be `Buffer` instance, not `Array<number>` — `Buffer.from(new TextEncoder().encode(...))`.
+- Memory panic ("out of memory"): Caused by large `space` in `init_if_needed`. Fixed with minimal initial space (~109 bytes) + `realloc` to exact size inside instruction.
+- Devnet lag: PDA/account data often invisible for 30–120 seconds after confirm — normal, not code failure.
+
+**Current Pain Point**
+- Latest uploads confirm but PDA not immediately visible on explorer or `getAccountInfo` due to devnet indexing delay.
+- Solution: Wait/retry, use faster RPC if available, or add polling loop in script.
+
+**Next Steps**
+- Confirm latest PDA on explorer (refresh 1–2 min)
+- Run `claim.js` on that PDA with funded buyer key
+- If decrypt works → core flow complete
+- Add NFT escrow (Metaplex) to PDA for gating
+- Build on-chain buy instruction (pay SOL → transfer NFT → buyer decrypts)
+
+This is a novel system — no existing blind vanity + Lit-encrypted PDA marketplace on Solana that I could find. We’re pioneering it.
+
+Let me know if you want to tweak anything before pasting this to a new instance!
+
+(You can copy everything from the start of this message down to here.)
