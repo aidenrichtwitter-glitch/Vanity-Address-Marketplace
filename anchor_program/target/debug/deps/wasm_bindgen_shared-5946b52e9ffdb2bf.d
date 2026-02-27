@@ -7,4 +7,4 @@
 /home/runner/workspace/.local/share/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/wasm-bindgen-shared-0.2.113/src/tys.rs:
 
 # env-dep:CARGO_PKG_VERSION=0.2.113
-# env-dep:WBG_VERSION=11db2bff9
+# env-dep:WBG_VERSION=34cc6eee2

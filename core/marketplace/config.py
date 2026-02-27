@@ -1,6 +1,6 @@
 from solders.pubkey import Pubkey
 
-PROGRAM_ID = Pubkey.from_string("EHS97x7xVo4svEVrEsVnihXgPLozCFs1BH7Bnkuf2nP6")
+PROGRAM_ID = Pubkey.from_string("5saJBeNvrbQ4WcVueFietuBxAixnV1u8StXUriXUuFj5")
 
 PDA_SEED_PREFIX = b"vanity_pkg"
 

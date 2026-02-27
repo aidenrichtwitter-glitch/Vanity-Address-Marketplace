@@ -83,10 +83,15 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 - Burn transaction signature
 
 ### On-Chain Program
-- Program ID: `EHS97x7xVo4svEVrEsVnihXgPLozCFs1BH7Bnkuf2nP6` (deployed on devnet)
+- Program ID: `5saJBeNvrbQ4WcVueFietuBxAixnV1u8StXUriXUuFj5` (deployed on devnet)
+- Native Solana program (no Anchor framework) at `anchor_program/programs/blind_vanity/src/lib.rs`
+- Built with `solana-program 1.18` + `borsh 0.10` using `cargo-build-sbf`
 - PDA seed: `b"vanity_pkg"` + vanity pubkey bytes
-- Discriminator: `[165, 105, 103, 168, 229, 214, 177, 251]`
+- Instruction discriminator: `[0xa5, 0x69, 0x67, 0xa8, 0xe5, 0xd6, 0xb1, 0xfb]`
+- Account discriminator: `[0x18, 0x46, 0x62, 0xBF, 0x3A, 0x90, 0x7B, 0x9E]`
+- Account data layout: discriminator(8) + vanity_pubkey(32) + json_len(4) + json_bytes + authority(32) + bump(1)
 - Instruction: `upload_vanity_package(vanity_pubkey, encrypted_json)`
+- Deployer wallet: `4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever`
 
 ### SPL Token (NFT)
 - Token Program: `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA`
