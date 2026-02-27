@@ -823,23 +823,38 @@ class MainWindow(QMainWindow):
         self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
         root.addWidget(self.upload_status_label)
 
-        buyer_box = QGroupBox("Browse & Decrypt Packages")
+        buyer_box = QGroupBox("Search & Decrypt Packages")
         buyer_layout = QVBoxLayout(buyer_box)
         buyer_layout.setSpacing(8)
 
-        browse_row = QHBoxLayout()
-        browse_row.setSpacing(8)
-        self.browse_packages_btn = QPushButton("Browse Packages")
-        self.browse_packages_btn.setObjectName("browseBtn")
-        self.browse_packages_btn.setFixedWidth(160)
-        self.browse_packages_btn.clicked.connect(self._browse_packages)
-        browse_row.addWidget(self.browse_packages_btn)
+        search_row = QHBoxLayout()
+        search_row.setSpacing(8)
 
-        self.packages_status_label = QLabel("Click 'Browse Packages' to fetch available vanity keys")
+        self.browse_packages_btn = QPushButton("Search Packages")
+        self.browse_packages_btn.setObjectName("startBtn")
+        self.browse_packages_btn.setFixedWidth(160)
+        self.browse_packages_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a5a9e; border: 2px solid #4a8aee;
+                border-radius: 4px; color: #e0e8ff; font-weight: bold;
+                font-size: 12px; padding: 8px 16px;
+            }
+            QPushButton:hover { background-color: #3a6abe; }
+            QPushButton:disabled { background-color: #2a2a4a; border-color: #4a4a6e; color: #6666aa; }
+        """)
+        self.browse_packages_btn.clicked.connect(self._browse_packages)
+        search_row.addWidget(self.browse_packages_btn)
+
+        self.search_filter_edit = QLineEdit()
+        self.search_filter_edit.setPlaceholderText("Filter by vanity address suffix (optional)")
+        self.search_filter_edit.setFixedWidth(280)
+        search_row.addWidget(self.search_filter_edit)
+
+        self.packages_status_label = QLabel("Click 'Search Packages' to fetch uploaded vanity keys from devnet")
         self.packages_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
-        browse_row.addWidget(self.packages_status_label)
-        browse_row.addStretch()
-        buyer_layout.addLayout(browse_row)
+        search_row.addWidget(self.packages_status_label)
+        search_row.addStretch()
+        buyer_layout.addLayout(search_row)
 
         self.packages_table = QTableWidget(0, 3)
         self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "PDA", "Data Size"])
@@ -952,32 +967,50 @@ class MainWindow(QMainWindow):
         self.mp_log_text.append(msg)
 
     def _browse_packages(self):
-        self.packages_status_label.setText("Fetching packages from devnet...")
+        self.packages_status_label.setText("Searching devnet for packages...")
         self.browse_packages_btn.setEnabled(False)
+        search_filter = self.search_filter_edit.text().strip().lower()
 
         def _fetch():
             try:
                 from core.marketplace.solana_client import fetch_all_packages
                 packages = fetch_all_packages()
-                self._packages_data = packages
-                QTimer.singleShot(0, lambda: self._populate_packages(packages))
+                QTimer.singleShot(0, lambda: self._populate_packages(packages, search_filter))
             except Exception as e:
                 QTimer.singleShot(0, lambda: self._on_browse_error(str(e)))
 
         t = threading.Thread(target=_fetch, daemon=True)
         t.start()
 
-    def _populate_packages(self, packages):
+    def _populate_packages(self, packages, search_filter=""):
         self.browse_packages_btn.setEnabled(True)
         self.packages_table.setRowCount(0)
 
+        if search_filter:
+            filtered = [p for p in packages if search_filter in p.get("vanity_address", "").lower()]
+        else:
+            filtered = packages
+
+        self._packages_data = filtered
+
         if not packages:
             self.packages_status_label.setText("No packages found on devnet")
+            self._mp_log("Search complete: no packages found on devnet")
             return
 
-        self.packages_status_label.setText(f"Found {len(packages)} package(s)")
+        if search_filter and not filtered:
+            self.packages_status_label.setText(f"No matches for '{search_filter}' ({len(packages)} total packages)")
+            self._mp_log(f"Search for '{search_filter}': 0 matches out of {len(packages)} packages")
+            return
 
-        for pkg in packages:
+        if search_filter:
+            self.packages_status_label.setText(f"{len(filtered)} match(es) for '{search_filter}' ({len(packages)} total)")
+            self._mp_log(f"Search for '{search_filter}': {len(filtered)} matches out of {len(packages)} packages")
+        else:
+            self.packages_status_label.setText(f"Found {len(filtered)} package(s)")
+            self._mp_log(f"Search complete: {len(filtered)} packages found")
+
+        for pkg in filtered:
             row = self.packages_table.rowCount()
             self.packages_table.insertRow(row)
 
@@ -996,8 +1029,8 @@ class MainWindow(QMainWindow):
 
     def _on_browse_error(self, err):
         self.browse_packages_btn.setEnabled(True)
-        self.packages_status_label.setText(f"Error: {err[:60]}")
-        self._mp_log(f"Browse error: {err}")
+        self.packages_status_label.setText(f"Search error: {err[:60]}")
+        self._mp_log(f"Search error: {err}")
 
     def _decrypt_selected(self):
         selected = self.packages_table.selectedItems()
