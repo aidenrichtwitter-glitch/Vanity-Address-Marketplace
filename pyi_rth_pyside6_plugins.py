@@ -21,12 +21,27 @@ if getattr(sys, 'frozen', False):
                 if os.path.isdir(p):
                     os.add_dll_directory(p)
 
-    if os.path.isdir(plugin_path):
-        os.environ["QT_PLUGIN_PATH"] = plugin_path
+    search_dirs = [
+        plugin_path,
+        os.path.join(base, "plugins"),
+        os.path.join(base, "qt6", "plugins"),
+        base,
+    ]
 
-    if os.path.isdir(platforms_path):
-        os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = platforms_path
-    elif os.path.isdir(plugin_path):
-        os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = plugin_path
+    resolved_plugin = None
+    resolved_platforms = None
+    for d in search_dirs:
+        if os.path.isdir(d):
+            if resolved_plugin is None:
+                resolved_plugin = d
+            pp = os.path.join(d, "platforms")
+            if os.path.isdir(pp) and resolved_platforms is None:
+                resolved_platforms = pp
 
-    os.environ["QT_QPA_PLATFORM"] = "windows" if sys.platform == "win32" else "xcb"
+    if resolved_plugin:
+        os.environ["QT_PLUGIN_PATH"] = resolved_plugin
+    if resolved_platforms:
+        os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = resolved_platforms
+
+    if sys.platform == "win32":
+        os.environ.setdefault("QT_QPA_PLATFORM", "windows")

@@ -1,7 +1,7 @@
 # SolVanity Word Miner (SolVanityCL Fork)
 
 ## Overview
-A desktop GUI application (PySide6/Qt) that mines Solana vanity addresses using GPU (OpenCL), filtering for addresses whose last characters match dictionary words with optional "X" padding. Includes a blind vanity key marketplace with NFT-based burn-to-decrypt mechanics — mined keys are encrypted with Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers burn the NFT to decrypt and save the private key locally.
+A GPU-accelerated Solana vanity address miner with both a web UI (Flask) and a desktop GUI (PySide6/Qt). Mines addresses whose last characters match dictionary words with optional "X" padding. Includes a blind vanity key marketplace with NFT-based burn-to-decrypt mechanics — mined keys are encrypted with Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers burn the NFT to decrypt and save the private key locally.
 
 Examples of vanity addresses:
 - `...XXomen` (XX padding + 4-letter word)
@@ -16,7 +16,10 @@ Suffix patterns are passed to the GPU via global memory buffers (not constant me
 Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capable GPU.**
 
 ## Architecture
-- `gui.py` - PySide6 desktop GUI with tabbed interface (Word Miner + Marketplace tabs)
+- `web_app.py` - Flask web UI server (port 5000) with SSE for real-time updates — primary interface in Replit
+- `templates/index.html` - Web frontend with tabbed interface (Word Miner + Marketplace tabs)
+- `static/style.css` - Dark theme CSS matching the original Qt design
+- `gui.py` - PySide6 desktop GUI (used for Windows builds via PyInstaller)
 - `main.py` - CLI entry point (alternative to GUI)
 - `build.py` - PyInstaller build script to create standalone executable
 - `wordlist_3000.txt` - Default word list (3000 common English words, ~2000 Base58-valid)
@@ -116,7 +119,8 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 - ~837 additional words recovered from l to 1 substitution
 
 ## Dependencies
-- **PySide6** - Qt GUI framework
+- **Flask** - Web UI framework (for Replit webview)
+- **PySide6** - Qt GUI framework (for Windows desktop builds)
 - **pyopencl** - GPU acceleration (required)
 - **pynacl** - Ed25519 key generation
 - **base58** - Base58 encoding for Solana addresses

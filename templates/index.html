@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SolVanity Word Miner</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="container">
+    <h1>SolVanity Word Miner</h1>
+    <p class="subtitle">GPU-Accelerated Solana Vanity Address Mining | Blind Key Marketplace</p>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('miner')">Word Miner</button>
+        <button class="tab-btn" onclick="switchTab('marketplace')">Marketplace</button>
+    </div>
+
+    <!-- WORD MINER TAB -->
+    <div id="tab-miner" class="tab-content active">
+        <button class="settings-toggle" id="settingsToggle" onclick="toggleSettings()">&#9660; Mining Settings</button>
+        <div class="settings-content" id="settingsContent">
+            <div class="row">
+                <div class="field">
+                    <span class="field-label">Min Word Length</span>
+                    <input type="number" id="minWordLen" value="4" min="1" max="20" style="width:90px" onchange="loadWordCount()">
+                </div>
+                <div class="field grow">
+                    <span class="field-label">Output Directory</span>
+                    <input type="text" id="outputDir" value="./found_words">
+                </div>
+            </div>
+            <div class="row">
+                <div class="field grow">
+                    <span class="field-label">Word List (optional - uses built-in list if empty)</span>
+                    <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()">
+                </div>
+            </div>
+            <div class="row">
+                <div class="field grow">
+                    <span class="field-label">GPU Power</span>
+                    <div class="power-row">
+                        <input type="range" id="powerSlider" min="10" max="100" value="100" step="5" oninput="document.getElementById('powerLabel').textContent=this.value+'%'">
+                        <span class="power-label" id="powerLabel">100%</span>
+                    </div>
+                </div>
+                <div class="field">
+                    <span class="field-label">Max GPU Temp</span>
+                    <input type="number" id="maxTemp" value="80" min="60" max="95" style="width:90px">
+                </div>
+                <div class="field">
+                    <span class="field-label">Detected GPU</span>
+                    <span class="gpu-name" id="gpuName">Detecting...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="mode-frame">
+            <div class="mode-header">
+                <span class="mode-title">Mining Mode:</span>
+                <button class="mode-btn active mine" id="mineModeBtn" onclick="setMiningMode('mine')">Mine Mode</button>
+                <button class="mode-btn" id="blindModeBtn" onclick="setMiningMode('blind')">Blind Mode</button>
+                <span class="mode-status mine" id="modeStatus">Keys saved locally for your use</span>
+            </div>
+            <div class="blind-wallet-section" id="blindWalletSection">
+                <div class="inline-row" style="margin-top:6px">
+                    <span class="field-label" style="width:90px">Seller Wallet:</span>
+                    <input type="password" id="sellerWallet" placeholder="Set SOLANA_DEVNET_PRIVKEY env var or paste key" style="flex:1">
+                    <button class="btn btn-secondary" onclick="toggleVisibility('sellerWallet')">Show</button>
+                </div>
+                <p class="blind-info" style="margin-top:4px">
+                    Blind Mode: Private keys are encrypted with Lit Protocol and uploaded to the Solana devnet marketplace.
+                    You will NOT see the private key - only buyers who meet access conditions can decrypt it.
+                </p>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div class="left">
+                <button class="btn btn-start" id="startBtn" onclick="toggleMining()">Start Mining</button>
+                <span class="stat-label stat-words" id="wordsLabel">Words: --</span>
+                <span class="stat-label stat-status" id="statusLabel">Ready</span>
+                <span class="stat-label stat-speed" id="speedLabel"></span>
+                <span class="stat-label stat-count" id="countLabel">Found: 0</span>
+            </div>
+            <div class="temp-box" id="tempBox">
+                <div class="title">GPU Temp</div>
+                <div class="temp-value" id="tempValue">--&deg;C</div>
+                <div class="temp-status" id="tempStatus"></div>
+            </div>
+        </div>
+
+        <div class="group-box" style="margin-top:10px">
+            <div class="group-box-title">Found Addresses</div>
+            <div class="found-table-container">
+                <table>
+                    <thead><tr><th>Address</th><th>Suffix</th><th>Time</th></tr></thead>
+                    <tbody id="foundTable"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="group-box" style="margin-top:10px">
+            <div class="group-box-title">Log</div>
+            <div class="log-box" id="miningLog"></div>
+        </div>
+    </div>
+
+    <!-- MARKETPLACE TAB -->
+    <div id="tab-marketplace" class="tab-content">
+        <p class="marketplace-info">
+            Browse vanity key NFTs. Buy &amp; Burn an NFT to decrypt the private key.
+            Hold an NFT to resell it - burning is permanent and saves the key locally.
+        </p>
+
+        <div class="group-box">
+            <div class="group-box-title">Buyer Wallet</div>
+            <div class="inline-row">
+                <span class="field-label" style="width:75px">Private Key:</span>
+                <input type="password" id="buyerWallet" placeholder="Base58 private key (needed to burn NFT and decrypt)" style="flex:1">
+                <button class="btn btn-secondary" onclick="toggleVisibility('buyerWallet')">Show</button>
+            </div>
+        </div>
+
+        <span class="upload-status" id="uploadStatus"></span>
+
+        <div class="group-box">
+            <div class="group-box-title">NFT Marketplace</div>
+            <div class="inline-row" style="margin-bottom:8px">
+                <button class="btn btn-search" id="searchBtn" onclick="searchPackages()">Search Packages</button>
+                <input type="text" id="searchFilter" placeholder="Filter by vanity address suffix (optional)" style="width:280px">
+                <span class="mp-status" id="packagesStatus">Click 'Search Packages' to fetch uploaded vanity keys from devnet</span>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Vanity Address</th><th>NFT Mint</th><th>Price</th><th>Status</th><th>Verified</th></tr></thead>
+                    <tbody id="packagesTable"></tbody>
+                </table>
+            </div>
+            <div class="inline-row" style="margin-top:8px">
+                <button class="btn btn-burn" id="buyBtn" disabled onclick="buyAndBurn()">Buy &amp; Burn - Select a package</button>
+                <span class="decrypt-status" id="decryptStatus"></span>
+            </div>
+            <div class="result-row">
+                <label>Saved To:</label>
+                <input type="text" id="savedTo" readonly placeholder="Burn an NFT to decrypt - key will be saved to decrypted_keys/">
+            </div>
+        </div>
+
+        <div class="group-box" style="margin-top:10px">
+            <div class="group-box-title">Marketplace Log</div>
+            <div class="log-box" id="mpLog"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+let isMining = false;
+let miningMode = 'mine';
+let selectedPackageIdx = -1;
+let packagesData = [];
+let eventSource = null;
+let startTime = null;
+let elapsedTimer = null;
+
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', (tab === 'miner' && i === 0) || (tab === 'marketplace' && i === 1));
+    });
+    document.getElementById('tab-miner').classList.toggle('active', tab === 'miner');
+    document.getElementById('tab-marketplace').classList.toggle('active', tab === 'marketplace');
+}
+
+function toggleSettings() {
+    const content = document.getElementById('settingsContent');
+    const toggle = document.getElementById('settingsToggle');
+    const collapsed = content.classList.toggle('collapsed');
+    toggle.innerHTML = (collapsed ? '&#9654;' : '&#9660;') + ' Mining Settings';
+}
+
+function toggleVisibility(id) {
+    const el = document.getElementById(id);
+    el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function setMiningMode(mode) {
+    miningMode = mode;
+    const mineBtn = document.getElementById('mineModeBtn');
+    const blindBtn = document.getElementById('blindModeBtn');
+    const status = document.getElementById('modeStatus');
+    const blindSection = document.getElementById('blindWalletSection');
+
+    if (mode === 'mine') {
+        mineBtn.className = 'mode-btn active mine';
+        blindBtn.className = 'mode-btn';
+        status.textContent = 'Keys saved locally for your use';
+        status.className = 'mode-status mine';
+        blindSection.classList.remove('visible');
+    } else {
+        mineBtn.className = 'mode-btn';
+        blindBtn.className = 'mode-btn active blind';
+        status.textContent = 'Keys encrypted + uploaded to marketplace';
+        status.className = 'mode-status blind';
+        blindSection.classList.add('visible');
+    }
+}
+
+function loadWordCount() {
+    const minLen = parseInt(document.getElementById('minWordLen').value) || 4;
+    const wordlist = document.getElementById('wordlistFile').value.trim();
+    fetch('/api/wordcount', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({min_length: minLen, wordlist_file: wordlist || null})
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            document.getElementById('wordsLabel').textContent = 'Words: error';
+        } else {
+            document.getElementById('wordsLabel').textContent =
+                `Words: ${d.words} | Patterns: ${d.patterns} (${d.source})`;
+        }
+    })
+    .catch(() => {});
+}
+
+function toggleMining() {
+    if (isMining) {
+        stopMining();
+    } else {
+        startMining();
+    }
+}
+
+function startMining() {
+    const params = {
+        min_length: parseInt(document.getElementById('minWordLen').value) || 4,
+        output_dir: document.getElementById('outputDir').value || './found_words',
+        wordlist_file: document.getElementById('wordlistFile').value.trim() || null,
+        power_pct: parseInt(document.getElementById('powerSlider').value) || 100,
+        max_temp: parseInt(document.getElementById('maxTemp').value) || 80,
+        mining_mode: miningMode,
+        blind_wallet: document.getElementById('sellerWallet').value.trim(),
+    };
+
+    document.getElementById('foundTable').innerHTML = '';
+    document.getElementById('miningLog').textContent = '';
+    document.getElementById('countLabel').textContent = 'Found: 0';
+    document.getElementById('speedLabel').textContent = '';
+
+    fetch('/api/start', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(params)
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            appendLog('miningLog', 'ERROR: ' + d.error);
+            return;
+        }
+        isMining = true;
+        startTime = Date.now();
+        updateMiningButton();
+        setControlsEnabled(false);
+        connectSSE();
+        startElapsedTimer();
+    })
+    .catch(e => appendLog('miningLog', 'Failed to start: ' + e));
+}
+
+function stopMining() {
+    fetch('/api/stop', {method: 'POST'})
+    .then(r => r.json())
+    .then(() => {
+        document.getElementById('statusLabel').textContent = 'Stopping...';
+    })
+    .catch(e => appendLog('miningLog', 'Failed to stop: ' + e));
+}
+
+function updateMiningButton() {
+    const btn = document.getElementById('startBtn');
+    if (isMining) {
+        btn.textContent = 'Stop Mining';
+        btn.className = 'btn btn-stop';
+    } else {
+        btn.textContent = 'Start Mining';
+        btn.className = 'btn btn-start';
+    }
+}
+
+function setControlsEnabled(enabled) {
+    const ids = ['minWordLen', 'outputDir', 'wordlistFile', 'powerSlider', 'maxTemp', 'mineModeBtn', 'blindModeBtn'];
+    ids.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !enabled;
+    });
+}
+
+function startElapsedTimer() {
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    elapsedTimer = setInterval(() => {
+        if (!isMining || !startTime) return;
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+        const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+        const s = String(elapsed % 60).padStart(2, '0');
+        document.getElementById('statusLabel').textContent = `Mining... ${h}:${m}:${s}`;
+    }, 1000);
+}
+
+function connectSSE() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/stream');
+
+    eventSource.addEventListener('found', e => {
+        const d = JSON.parse(e.data);
+        const tbody = document.getElementById('foundTable');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="addr-cell">${esc(d.address)}</td><td class="suffix-cell">${esc(d.suffix)}</td><td class="time-cell">${esc(d.time)}</td>`;
+        tbody.appendChild(tr);
+        tbody.parentElement.parentElement.scrollTop = tbody.parentElement.parentElement.scrollHeight;
+        document.getElementById('countLabel').textContent = `Found: ${d.count}`;
+    });
+
+    eventSource.addEventListener('speed', e => {
+        const d = JSON.parse(e.data);
+        let speedStr = (d.value / 1e6).toFixed(2) + ' MKeys/s';
+        if (d.total_keys > 0) speedStr += ' | ' + fmtKeys(d.total_keys) + ' checked';
+        if (d.suffix_pattern_count > 0 && d.value > 0) {
+            const prob = d.suffix_pattern_count / Math.pow(58, 6);
+            if (prob > 0) {
+                const expected = 1.0 / prob;
+                const remaining = Math.max(0, expected - d.total_keys);
+                const eta = remaining / d.value;
+                if (eta < 60) speedStr += ` | ~${eta.toFixed(0)}s ETA`;
+                else if (eta < 3600) speedStr += ` | ~${(eta/60).toFixed(1)}m ETA`;
+                else speedStr += ` | ~${(eta/3600).toFixed(1)}h ETA`;
+            }
+        }
+        document.getElementById('speedLabel').textContent = speedStr;
+    });
+
+    eventSource.addEventListener('log', e => {
+        const d = JSON.parse(e.data);
+        appendLog('miningLog', d.msg);
+    });
+
+    eventSource.addEventListener('mp_log', e => {
+        const d = JSON.parse(e.data);
+        appendLog('mpLog', d.msg);
+    });
+
+    eventSource.addEventListener('status', e => {
+        const d = JSON.parse(e.data);
+        document.getElementById('statusLabel').textContent = d.msg;
+    });
+
+    eventSource.addEventListener('error', e => {
+        if (e.data) {
+            const d = JSON.parse(e.data);
+            document.getElementById('statusLabel').textContent = 'Error';
+            appendLog('miningLog', 'ERROR: ' + d.msg);
+        }
+    });
+
+    eventSource.addEventListener('stopped', () => {
+        isMining = false;
+        updateMiningButton();
+        setControlsEnabled(true);
+        if (elapsedTimer) { clearInterval(elapsedTimer); elapsedTimer = null; }
+    });
+
+    eventSource.addEventListener('gpu_detected', e => {
+        const d = JSON.parse(e.data);
+        document.getElementById('gpuName').textContent = d.name;
+        document.getElementById('maxTemp').value = d.recommended_temp;
+    });
+
+    eventSource.addEventListener('temp', e => {
+        const d = JSON.parse(e.data);
+        const temp = d.value;
+        if (temp === null || temp === undefined) return;
+        const maxT = parseInt(document.getElementById('maxTemp').value) || 80;
+        const tempBox = document.getElementById('tempBox');
+        document.getElementById('tempValue').innerHTML = temp + '&deg;C';
+
+        if (temp >= maxT) {
+            tempBox.className = 'temp-box hot';
+            document.getElementById('tempStatus').textContent = 'THROTTLED';
+        } else if (temp >= maxT - 10) {
+            tempBox.className = 'temp-box warm';
+            document.getElementById('tempStatus').textContent = 'WARM';
+        } else {
+            tempBox.className = 'temp-box ok';
+            document.getElementById('tempStatus').textContent = 'OK';
+        }
+    });
+}
+
+function fmtKeys(n) {
+    if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(0) + 'K';
+    return n.toString();
+}
+
+function appendLog(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent += msg + '\n';
+    el.scrollTop = el.scrollHeight;
+}
+
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function searchPackages() {
+    const btn = document.getElementById('searchBtn');
+    const status = document.getElementById('packagesStatus');
+    const filter = document.getElementById('searchFilter').value.trim();
+
+    btn.disabled = true;
+    status.textContent = 'Searching devnet for packages + checking NFT status...';
+
+    fetch('/api/marketplace/search', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({filter: filter})
+    })
+    .then(r => r.json())
+    .then(d => {
+        btn.disabled = false;
+        if (d.error) {
+            status.textContent = 'Search error: ' + d.error.substring(0, 60);
+            appendLog('mpLog', 'Search error: ' + d.error);
+            return;
+        }
+        packagesData = d.packages;
+        selectedPackageIdx = -1;
+        const tbody = document.getElementById('packagesTable');
+        tbody.innerHTML = '';
+
+        if (d.packages.length === 0) {
+            status.textContent = filter ? `No matches for '${filter}'` : 'No packages found on devnet';
+            return;
+        }
+
+        status.textContent = `Found ${d.packages.length} package(s)`;
+        appendLog('mpLog', `Search complete: ${d.packages.length} packages found`);
+
+        d.packages.forEach((pkg, idx) => {
+            const tr = document.createElement('tr');
+            tr.onclick = () => selectPackage(idx);
+
+            const addr = pkg.vanity_address || 'unknown';
+            const mint = (pkg.encrypted_json || {}).mintAddress || '-';
+            const price = pkg.price || 'Free';
+            const nftStatus = pkg.nft_status || 'unknown';
+            const verified = pkg.verified || 'Unverified';
+
+            let statusClass = 'status-unknown';
+            if (nftStatus === 'ACTIVE') statusClass = 'status-active';
+            else if (nftStatus === 'BURNED') statusClass = 'status-burned';
+
+            let verifiedClass = 'verified-no';
+            if (verified === 'TEE Verified') verifiedClass = 'verified-tee';
+            else if (verified === 'Unknown Code') verifiedClass = 'verified-unknown';
+
+            tr.innerHTML = `<td class="addr-cell">${esc(addr)}</td><td class="mint-cell">${esc(mint)}</td><td class="price-cell">${esc(price)}</td><td class="${statusClass}">${esc(nftStatus)}</td><td class="${verifiedClass}">${esc(verified)}</td>`;
+            tbody.appendChild(tr);
+        });
+    })
+    .catch(e => {
+        btn.disabled = false;
+        status.textContent = 'Search failed';
+        appendLog('mpLog', 'Search error: ' + e);
+    });
+}
+
+function selectPackage(idx) {
+    selectedPackageIdx = idx;
+    const rows = document.querySelectorAll('#packagesTable tr');
+    rows.forEach((r, i) => r.classList.toggle('selected', i === idx));
+
+    const pkg = packagesData[idx];
+    const buyBtn = document.getElementById('buyBtn');
+    const addr = pkg.vanity_address || '';
+    const suffix = addr.length >= 6 ? addr.slice(-6) : addr;
+    const price = pkg.price || 'Free';
+
+    if (pkg.nft_status === 'BURNED') {
+        buyBtn.textContent = `SOLD - ...${suffix} already burned`;
+        buyBtn.disabled = true;
+    } else {
+        buyBtn.textContent = `Burn & Decrypt ...${suffix} - ${price}`;
+        buyBtn.disabled = false;
+    }
+}
+
+function buyAndBurn() {
+    if (selectedPackageIdx < 0 || selectedPackageIdx >= packagesData.length) return;
+
+    const pkg = packagesData[selectedPackageIdx];
+    const buyerKey = document.getElementById('buyerWallet').value.trim();
+    const decryptStatus = document.getElementById('decryptStatus');
+
+    if (!buyerKey) {
+        decryptStatus.textContent = 'Enter your buyer wallet private key first';
+        decryptStatus.style.color = '#ff5050';
+        return;
+    }
+
+    const mintAddress = (pkg.encrypted_json || {}).mintAddress || '';
+    if (!mintAddress) {
+        decryptStatus.textContent = 'This package has no NFT - cannot burn';
+        decryptStatus.style.color = '#ff5050';
+        return;
+    }
+
+    const buyBtn = document.getElementById('buyBtn');
+    buyBtn.disabled = true;
+    decryptStatus.textContent = 'Burning NFT...';
+    decryptStatus.style.color = '#ffaa30';
+
+    fetch('/api/marketplace/buy', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            buyer_key: buyerKey,
+            encrypted_json: pkg.encrypted_json,
+            mint_address: mintAddress,
+            vanity_address: pkg.vanity_address,
+        })
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) {
+            buyBtn.disabled = false;
+            decryptStatus.textContent = 'Burn failed: ' + d.error.substring(0, 60);
+            decryptStatus.style.color = '#ff5050';
+            appendLog('mpLog', 'Burn error: ' + d.error);
+            return;
+        }
+
+        decryptStatus.textContent = 'NFT burned - key decrypted and saved!';
+        decryptStatus.style.color = '#50e050';
+        document.getElementById('savedTo').value = d.file;
+        appendLog('mpLog', `Burned NFT and decrypted key for: ${d.vanity_address}`);
+        appendLog('mpLog', `  Burn TX: ${d.burn_sig}`);
+        appendLog('mpLog', `  Key saved to: ${d.file}`);
+
+        packagesData[selectedPackageIdx].nft_status = 'BURNED';
+        const rows = document.querySelectorAll('#packagesTable tr');
+        if (rows[selectedPackageIdx]) {
+            rows[selectedPackageIdx].children[3].className = 'status-burned';
+            rows[selectedPackageIdx].children[3].textContent = 'BURNED';
+        }
+        buyBtn.textContent = 'SOLD - already burned';
+        buyBtn.disabled = true;
+    })
+    .catch(e => {
+        buyBtn.disabled = false;
+        decryptStatus.textContent = 'Buy failed';
+        decryptStatus.style.color = '#ff5050';
+        appendLog('mpLog', 'Buy error: ' + e);
+    });
+}
+
+loadWordCount();
+connectSSE();
+
+fetch('/api/status')
+    .then(r => r.json())
+    .then(d => {
+        if (d.running) {
+            isMining = true;
+            updateMiningButton();
+            setControlsEnabled(false);
+            startTime = Date.now();
+            startElapsedTimer();
+        }
+        if (d.gpu_name) document.getElementById('gpuName').textContent = d.gpu_name;
+        document.getElementById('statusLabel').textContent = d.status;
+    })
+    .catch(() => {});
+</script>
+</body>
+</html>
