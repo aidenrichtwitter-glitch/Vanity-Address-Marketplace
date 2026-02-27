@@ -16,7 +16,7 @@ if sys.platform != "win32":
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QPushButton, QSpinBox, QLineEdit, QTableWidget,
+    QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QTextEdit,
     QFileDialog, QSplitter, QSlider, QFrame, QTabWidget, QCheckBox,
 )
@@ -686,9 +686,27 @@ class MainWindow(QMainWindow):
         bw_row.addWidget(show_key_btn)
         blind_wallet_layout.addLayout(bw_row)
 
+        price_row = QHBoxLayout()
+        price_row.setSpacing(8)
+        price_lbl = QLabel("Price (SOL):")
+        price_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; border: none;")
+        price_row.addWidget(price_lbl)
+        self.blind_price_spin = QDoubleSpinBox()
+        self.blind_price_spin.setRange(0, 1000)
+        self.blind_price_spin.setDecimals(4)
+        self.blind_price_spin.setValue(0.1)
+        self.blind_price_spin.setSingleStep(0.01)
+        self.blind_price_spin.setFixedWidth(120)
+        price_row.addWidget(self.blind_price_spin)
+        price_hint = QLabel("0 = Free. Buyer pays this in SOL when purchasing.")
+        price_hint.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent; border: none;")
+        price_row.addWidget(price_hint)
+        price_row.addStretch()
+        blind_wallet_layout.addLayout(price_row)
+
         blind_info = QLabel(
-            "Blind Mode: Private keys are encrypted with Lit Protocol and uploaded to the Solana devnet marketplace. "
-            "You will NOT see the private key — only buyers who meet access conditions can decrypt it."
+            "Blind Mode: Keys are uploaded to the Solana devnet marketplace with an NFT. "
+            "Buyers pay the listed price in SOL to your wallet, then burn the NFT to receive the key."
         )
         blind_info.setWordWrap(True)
         blind_info.setStyleSheet("font-size: 10px; color: #c878c8; background: transparent; border: none; padding: 2px 0;")
@@ -1187,53 +1205,116 @@ class MainWindow(QMainWindow):
         selected = self.packages_table.selectedItems()
         if not selected:
             self.decrypt_status_label.setText("Select a package first")
+            self._mp_log("Buy error: No package selected")
             return
 
         row = selected[0].row()
         if row >= len(self._packages_data):
             self.decrypt_status_label.setText("Invalid selection")
+            self._mp_log("Buy error: Invalid row selection")
             return
 
         pkg = self._packages_data[row]
         encrypted_json = pkg.get("encrypted_json")
         if not encrypted_json:
             self.decrypt_status_label.setText("No encrypted data in this package")
+            self._mp_log("Buy error: Package has no encrypted_json")
             return
 
         mint_address = encrypted_json.get("mintAddress", "")
         if not mint_address:
             self.decrypt_status_label.setText("This package has no NFT — cannot burn")
+            self._mp_log("Buy error: Package has no mintAddress")
             return
 
         buyer_key = self.buyer_wallet_edit.text().strip()
         if not buyer_key:
             self.decrypt_status_label.setText("Enter your buyer wallet private key first")
+            self._mp_log("Buy error: No buyer wallet key entered")
             return
 
         addr = pkg.get("vanity_address", "")
         suffix = addr[-6:] if len(addr) >= 6 else addr
-        self.decrypt_status_label.setText(f"Burning NFT for ...{suffix}...")
+        price_lamports = int(encrypted_json.get("priceLamports", 0))
+        price_display = f"{price_lamports / 1e9:.4f} SOL" if price_lamports > 0 else "Free"
+
+        self.decrypt_status_label.setText(f"Processing purchase for ...{suffix}...")
         self.decrypt_status_label.setStyleSheet("color: #ffaa30; font-size: 11px; font-weight: bold; background: transparent;")
         self.buy_btn.setEnabled(False)
 
-        def _do_burn_and_decrypt():
-            try:
-                from core.marketplace.solana_client import load_seller_keypair
-                from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
-                from core.marketplace.lit_encrypt import decrypt_private_key
+        self._mp_log(f"=== BUY & BURN START ===")
+        self._mp_log(f"  Vanity: {addr}")
+        self._mp_log(f"  Mint: {mint_address}")
+        self._mp_log(f"  Price: {price_display}")
+        self._mp_log(f"  Package keys: {list(encrypted_json.keys())}")
 
+        def _do_burn_and_decrypt():
+            import traceback as _tb
+
+            def _status(msg):
+                QTimer.singleShot(0, lambda m=msg: self._on_burn_status(m))
+
+            def _mp(msg):
+                QTimer.singleShot(0, lambda m=msg: self._mp_log(m))
+
+            try:
+                _mp("  Step 1: Importing modules...")
+                from core.marketplace.solana_client import load_seller_keypair, transfer_sol
+                from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
+                _mp("  Step 1: Imports OK")
+            except Exception as e:
+                _mp(f"  FATAL: Import failed: {e}")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                QTimer.singleShot(0, lambda: self._on_burn_error(f"Import failed: {e}"))
+                return
+
+            try:
+                _mp("  Step 2: Checking NFT supply...")
                 supply = check_nft_supply(mint_address)
+                _mp(f"  Step 2: Supply = {supply}")
                 if supply == 0:
+                    _mp("  ABORT: NFT already burned")
                     QTimer.singleShot(0, lambda: self._on_burn_error("NFT already burned — this key was already sold"))
                     return
 
+                _mp("  Step 3: Loading buyer keypair...")
                 buyer_kp = load_seller_keypair(buyer_key)
+                buyer_pubkey = str(buyer_kp.pubkey())
+                _mp(f"  Step 3: Buyer loaded: {buyer_pubkey}")
 
+                seller_addr = encrypted_json.get("sellerAddress", "")
+
+                if price_lamports > 0 and seller_addr:
+                    _mp(f"  Step 4: SOL payment required ({price_display})...")
+                    _status(f"Paying {price_display} to seller...")
+                    from solders.pubkey import Pubkey as SoldersPubkey
+                    from solana.rpc.api import Client as SolClient
+                    from solana.rpc.commitment import Confirmed as SolConfirmed
+                    sol_client = SolClient("https://api.devnet.solana.com")
+                    buyer_balance = sol_client.get_balance(buyer_kp.pubkey(), SolConfirmed).value
+                    _mp(f"  Step 4: Buyer balance = {buyer_balance} lamports ({buyer_balance / 1e9:.4f} SOL)")
+                    if buyer_balance < price_lamports + 10_000:
+                        _mp(f"  ABORT: Insufficient funds")
+                        QTimer.singleShot(0, lambda: self._on_burn_error(f"Insufficient SOL. Need {price_lamports / 1e9:.4f} + fees, have {buyer_balance / 1e9:.4f}"))
+                        return
+                    seller_pubkey = SoldersPubkey.from_string(seller_addr)
+                    _mp(f"  Step 4: Transferring {price_lamports} lamports to {seller_addr}...")
+                    payment_sig = transfer_sol(buyer_kp, seller_pubkey, price_lamports)
+                    _mp(f"  Step 4: Payment sent, sig = {payment_sig}")
+                    _mp(f"  Step 4: Waiting 2s for confirmation...")
+                    import time
+                    time.sleep(2)
+                else:
+                    _mp("  Step 4: No payment required (free)")
+                    payment_sig = None
+
+                _mp("  Step 5: Checking buyer NFT balance...")
                 balance = check_token_balance(buyer_kp.pubkey(), mint_address)
+                _mp(f"  Step 5: Buyer NFT balance = {balance}")
                 if balance == 0:
-                    seller_addr = encrypted_json.get("sellerAddress", "")
                     if seller_addr:
-                        QTimer.singleShot(0, lambda: self._on_burn_status("Transferring NFT to buyer wallet..."))
+                        _status("Transferring NFT to buyer wallet...")
+                        _mp("  Step 5: Transferring NFT from seller to buyer...")
                         seller_key_env = self.seller_wallet_edit.text().strip() if hasattr(self, 'seller_wallet_edit') else ""
                         if not seller_key_env:
                             import os
@@ -1241,30 +1322,62 @@ class MainWindow(QMainWindow):
                         if seller_key_env:
                             seller_kp = load_seller_keypair(seller_key_env)
                             transfer_nft(seller_kp, buyer_kp.pubkey(), mint_address)
+                            _mp("  Step 5: NFT transferred to buyer")
                         else:
+                            _mp("  ABORT: Buyer doesn't own NFT and no seller key available")
                             QTimer.singleShot(0, lambda: self._on_burn_error("You don't own this NFT. Transfer it to your wallet first."))
                             return
+                    else:
+                        _mp("  ABORT: Buyer doesn't own NFT and no seller address in package")
+                        QTimer.singleShot(0, lambda: self._on_burn_error("You don't own this NFT and no seller info available."))
+                        return
 
-                QTimer.singleShot(0, lambda: self._on_burn_status("Burning NFT on-chain..."))
+                _status("Burning NFT on-chain...")
+                _mp(f"  Step 6: Burning NFT {mint_address}...")
                 burn_sig = burn_nft(buyer_kp, mint_address)
+                _mp(f"  Step 6: NFT burned, sig = {burn_sig}")
 
-                QTimer.singleShot(0, lambda: self._on_burn_status("NFT burned! Decrypting private key..."))
-                privkey = decrypt_private_key(encrypted_json)
+                _status("NFT burned! Extracting private key...")
+                privkey = encrypted_json.get("privateKey", "")
+                if not privkey:
+                    _mp("  Step 7: No plaintext key, attempting Lit decryption...")
+                    try:
+                        from core.marketplace.lit_encrypt import decrypt_private_key
+                        privkey = decrypt_private_key(encrypted_json)
+                        _mp("  Step 7: Lit decryption succeeded")
+                    except Exception as e:
+                        _mp(f"  Step 7: Lit decryption failed: {e}")
+                        privkey = f"(decryption unavailable: {str(e)[:60]})"
+                else:
+                    _mp(f"  Step 7: Plaintext key found ({len(privkey)} chars)")
 
                 out_dir = Path("decrypted_keys")
                 out_dir.mkdir(exist_ok=True)
                 vanity = pkg.get("vanity_address", "unknown")
                 out_file = out_dir / f"{vanity}.txt"
-                out_file.write_text(
-                    f"Vanity Address: {vanity}\n"
-                    f"Private Key: {privkey}\n"
-                    f"NFT Mint: {mint_address}\n"
-                    f"Burn TX: {burn_sig}\n",
-                    encoding="utf-8",
-                )
+                lines = [
+                    f"Vanity Address: {vanity}",
+                    f"Private Key: {privkey}",
+                    f"NFT Mint: {mint_address}",
+                    f"Burn TX: {burn_sig}",
+                ]
+                if payment_sig:
+                    lines.append(f"Payment TX: {payment_sig}")
+                    lines.append(f"Price: {price_lamports} lamports ({price_lamports / 1e9:.4f} SOL)")
+                out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                _mp(f"  Step 8: Key saved to {out_file}")
+
+                _mp(f"=== BUY & BURN COMPLETE ===")
+                _mp(f"  Burn sig: {burn_sig}")
+                if payment_sig:
+                    _mp(f"  Payment sig: {payment_sig}")
+                _mp(f"  Key file: {out_file}")
 
                 QTimer.singleShot(0, lambda: self._on_burn_success(str(out_file), vanity, burn_sig))
             except Exception as e:
+                _mp(f"=== BUY & BURN FAILED ===")
+                _mp(f"  Error: {e}")
+                _mp(f"  Traceback: {_tb.format_exc()}")
                 QTimer.singleShot(0, lambda: self._on_burn_error(str(e)))
 
         t = threading.Thread(target=_do_burn_and_decrypt, daemon=True)
@@ -1306,51 +1419,143 @@ class MainWindow(QMainWindow):
 
         wallet = self._blind_wallet_snapshot
         if not wallet:
+            self._on_log(f"[Blind] ERROR: No seller wallet configured, skipping upload for {pubkey[:16]}...")
+            self._mp_log(f"ERROR: No seller wallet set. Cannot upload {pubkey[:20]}...")
             return
 
-        self._on_log(f"[Blind] Minting NFT + encrypting key for {pubkey}...")
-        self._mp_log(f"Minting NFT and encrypting key for {pubkey}...")
+        word_label = f" ({vanity_word})" if vanity_word else ""
+        price_sol = getattr(self, '_blind_price_sol', 0)
+        price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
+
+        self._on_log(f"[Blind] === UPLOAD START for {pubkey[:16]}...{word_label} ===")
+        self._mp_log(f"--- Upload started for {pubkey}{word_label} ---")
+        self._mp_log(f"  Price setting: {price_display}")
+        self._mp_log(f"  Wallet: {wallet[:8]}...({len(wallet)} chars)")
 
         def _upload():
+            import traceback as _tb
+
+            def _log(msg):
+                QTimer.singleShot(0, lambda m=msg: self._on_log(f"[Blind] {m}"))
+
+            def _mp(msg):
+                QTimer.singleShot(0, lambda m=msg: self._mp_log(m))
+
             try:
+                _mp(f"  Step 1/6: Importing modules...")
                 import base58 as b58_mod
                 from nacl.signing import SigningKey
                 from core.marketplace.solana_client import load_seller_keypair, upload_package
-                from core.marketplace.lit_encrypt import encrypt_private_key
                 from core.marketplace.nft import mint_nft
                 from solders.pubkey import Pubkey
+                _mp(f"  Step 1/6: Imports OK")
+            except Exception as e:
+                _log(f"IMPORT FAILED: {e}")
+                _mp(f"  FATAL: Import failed: {e}")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                return
 
+            try:
+                _mp(f"  Step 2/6: Loading seller keypair...")
                 seller_kp = load_seller_keypair(wallet)
+                seller_pubkey = str(seller_kp.pubkey())
+                _mp(f"  Step 2/6: Seller loaded: {seller_pubkey}")
+            except Exception as e:
+                _log(f"WALLET LOAD FAILED: {e}")
+                _mp(f"  FATAL: Could not load seller wallet: {e}")
+                _mp(f"  Wallet input length: {len(wallet)} chars")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                return
 
+            try:
+                _mp(f"  Step 3/6: Minting NFT on devnet...")
+                _mp(f"    Seller: {seller_pubkey}")
                 mint_address = mint_nft(seller_kp)
-                QTimer.singleShot(0, lambda: self._on_log(f"[Blind] NFT minted: {mint_address[:20]}..."))
+                _log(f"NFT minted: {mint_address}")
+                _mp(f"  Step 3/6: NFT minted OK: {mint_address}")
+                _mp(f"    Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
+            except Exception as e:
+                _log(f"MINT FAILED: {e}")
+                _mp(f"  FATAL: NFT mint failed: {e}")
+                _mp(f"  This usually means insufficient SOL or RPC error")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                return
 
+            try:
+                _mp(f"  Step 4/6: Building package JSON...")
                 sk = SigningKey(pv_bytes)
                 pb_bytes = bytes(sk.verify_key)
                 privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+                _mp(f"    Private key encoded: {privkey_b58[:8]}...{privkey_b58[-8:]} ({len(privkey_b58)} chars)")
 
-                encrypted_json = encrypt_private_key(
-                    privkey_b58=privkey_b58,
-                    vanity_address=pubkey,
-                )
-
-                encrypted_json["mintAddress"] = mint_address
-                encrypted_json["sellerAddress"] = str(seller_kp.pubkey())
+                package_json = {
+                    "vanityAddress": pubkey,
+                    "privateKey": privkey_b58,
+                    "mintAddress": mint_address,
+                    "sellerAddress": seller_pubkey,
+                    "encryptedInTEE": False,
+                }
                 if vanity_word:
-                    encrypted_json["vanityWord"] = vanity_word
+                    package_json["vanityWord"] = vanity_word
+                if price_sol and float(price_sol) > 0:
+                    package_json["priceLamports"] = int(float(price_sol) * 1_000_000_000)
+                    _mp(f"    Price: {price_display} ({package_json['priceLamports']} lamports)")
 
+                import json as _json
+                json_size = len(_json.dumps(package_json))
+                _mp(f"  Step 4/6: Package built OK ({json_size} bytes, {len(package_json)} fields)")
+                _mp(f"    Fields: {list(package_json.keys())}")
+            except Exception as e:
+                _log(f"PACKAGE BUILD FAILED: {e}")
+                _mp(f"  FATAL: Failed to build package: {e}")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                return
+
+            try:
+                _mp(f"  Step 5/6: Deriving PDA...")
                 vanity_pubkey = Pubkey.from_string(pubkey)
+                _mp(f"    Vanity pubkey: {vanity_pubkey}")
+            except Exception as e:
+                _log(f"PDA DERIVATION FAILED: {e}")
+                _mp(f"  FATAL: Could not derive PDA: {e}")
+                _mp(f"  Traceback: {_tb.format_exc()}")
+                return
 
+            try:
+                _mp(f"  Step 6/6: Uploading package to Solana devnet PDA...")
+                _mp(f"    Sending transaction...")
                 result = upload_package(
                     seller_kp=seller_kp,
                     vanity_pubkey=vanity_pubkey,
-                    encrypted_json=encrypted_json,
+                    encrypted_json=package_json,
                 )
                 result["mint_address"] = mint_address
                 result["vanity_word"] = vanity_word
 
+                sig = result.get("signature", "")
+                pda_addr = result.get("pda", "")
+                explorer_url = result.get("explorer_url", "")
+
+                _log(f"SUCCESS: {pubkey[:20]}... uploaded ({price_display})")
+                _mp(f"  Step 6/6: Upload SUCCESS")
+                _mp(f"=== UPLOAD COMPLETE ===")
+                _mp(f"  Vanity Address: {pubkey}")
+                _mp(f"  Word: {vanity_word or '(none)'}")
+                _mp(f"  NFT Mint: {mint_address}")
+                _mp(f"  PDA: {pda_addr}")
+                _mp(f"  Price: {price_display}")
+                _mp(f"  TX Signature: {sig}")
+                _mp(f"  TX Explorer: {explorer_url}")
+                _mp(f"  NFT Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
+                _mp(f"========================")
+
                 QTimer.singleShot(0, lambda: self._on_upload_success(result, pubkey))
             except Exception as e:
+                _log(f"UPLOAD TX FAILED: {e}")
+                _mp(f"  FATAL: Upload transaction failed: {e}")
+                _mp(f"  NFT was minted ({mint_address}) but package was NOT uploaded")
+                _mp(f"  The NFT exists on-chain but has no associated package data")
+                _mp(f"  Traceback: {_tb.format_exc()}")
                 QTimer.singleShot(0, lambda: self._on_upload_error(str(e), pubkey))
 
         t = threading.Thread(target=_upload, daemon=True)
@@ -1539,9 +1744,14 @@ class MainWindow(QMainWindow):
         )
 
         self._blind_wallet_snapshot = self.seller_wallet_edit.text().strip() if self._mining_mode == "blind" else ""
+        self._blind_price_sol = 0
 
         if self._mining_mode == "blind":
-            self._on_log(f"[Blind] Mining in Blind Mode - keys will be encrypted and uploaded")
+            price_widget = getattr(self, 'blind_price_spin', None)
+            if price_widget:
+                self._blind_price_sol = price_widget.value()
+            price_display = f"{self._blind_price_sol:.4f} SOL" if self._blind_price_sol > 0 else "Free"
+            self._on_log(f"[Blind] Mining in Blind Mode - keys will be uploaded to marketplace ({price_display})")
 
         self.start_btn.setText("Stop Mining")
         self.start_btn.setObjectName("stopBtn")

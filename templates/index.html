@@ -200,6 +200,10 @@ function switchTab(tab) {
     });
     document.getElementById('tab-miner').classList.toggle('active', tab === 'miner');
     document.getElementById('tab-marketplace').classList.toggle('active', tab === 'marketplace');
+    if (tab === 'marketplace') {
+        searchPackages();
+        loadBounties();
+    }
 }
 
 function toggleSettings() {

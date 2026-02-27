@@ -98,9 +98,12 @@ def upload_package(
     encrypted_json: dict,
     rpc_url: str = RPC_URL,
 ) -> dict:
+    logger.info("[upload_package] seller=%s vanity=%s rpc=%s", seller_kp.pubkey(), vanity_pubkey, rpc_url)
     client = Client(rpc_url)
     encrypted_json_bytes = json.dumps(encrypted_json).encode("utf-8")
+    logger.info("[upload_package] Package JSON size: %d bytes", len(encrypted_json_bytes))
     pda = get_pda(vanity_pubkey)
+    logger.info("[upload_package] PDA: %s", pda)
 
     ix = build_upload_ix(
         pda=pda,
@@ -108,9 +111,12 @@ def upload_package(
         encrypted_json_bytes=encrypted_json_bytes,
         seller=seller_kp.pubkey(),
     )
+    logger.info("[upload_package] Instruction built (data_len=%d, accounts=%d)", len(bytes(ix.data)), len(ix.accounts))
 
+    logger.info("[upload_package] Getting latest blockhash...")
     bh_resp = client.get_latest_blockhash(Confirmed)
     blockhash = bh_resp.value.blockhash
+    logger.info("[upload_package] Blockhash: %s", blockhash)
 
     msg = MessageV0.try_compile(
         payer=seller_kp.pubkey(),
@@ -120,11 +126,12 @@ def upload_package(
     )
 
     tx = VersionedTransaction(msg, [seller_kp])
-
+    logger.info("[upload_package] Sending upload transaction...")
     sig_resp = client.send_transaction(
         tx, opts=TxOpts(skip_preflight=True, preflight_commitment=Confirmed)
     )
     sig = sig_resp.value
+    logger.info("[upload_package] SUCCESS: sig=%s pda=%s", sig, pda)
 
     return {
         "signature": str(sig),
@@ -134,6 +141,7 @@ def upload_package(
 
 
 def fetch_all_packages(rpc_url: str = RPC_URL) -> list:
+    logger.info("[fetch_all_packages] Fetching all program accounts from %s (program=%s)...", rpc_url, PROGRAM_ID)
     client = Client(rpc_url)
 
     resp = client.get_program_accounts(PROGRAM_ID, commitment=Confirmed)

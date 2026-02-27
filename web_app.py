@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import logging
 import multiprocessing
 import os
 import queue
@@ -15,6 +16,12 @@ from core.word_miner import build_suffix_patterns
 from core.config import DEFAULT_ITERATION_BITS
 from core.utils.crypto import get_public_key_from_private_bytes, save_keypair
 from core.utils.gpu_temp import get_gpu_temp, get_gpu_name, get_recommended_max_temp
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
 
 app = Flask(__name__)
 
@@ -203,35 +210,107 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
     price_sol = mining_state.get("blind_price_sol", 0)
 
     def _upload():
+        import traceback as _tb
+        word_label = f" ({vanity_word})" if vanity_word else ""
+        price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
+
+        def _log(msg):
+            broadcast_event("log", {"msg": f"[Blind] {msg}"})
+
+        def _mp(msg):
+            broadcast_event("mp_log", {"msg": msg})
+
+        _log(f"=== BLIND UPLOAD START for {pubkey}{word_label} ===")
+        _mp(f"--- Upload started for {pubkey}{word_label} ---")
+        _mp(f"  Price setting: {price_display}")
+
         try:
+            _mp(f"  Step 1/6: Importing modules...")
             import base58 as b58_mod
             from nacl.signing import SigningKey
             from core.marketplace.solana_client import load_seller_keypair, upload_package
             from core.marketplace.nft import mint_nft
             from solders.pubkey import Pubkey
+            _mp(f"  Step 1/6: Imports OK")
+        except Exception as e:
+            _log(f"IMPORT FAILED: {e}")
+            _mp(f"  FATAL: Import failed: {e}")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            broadcast_event("error", {"msg": f"Blind upload import failed: {str(e)[:80]}"})
+            return
 
+        try:
+            _mp(f"  Step 2/6: Loading seller keypair...")
             seller_kp = load_seller_keypair(wallet)
-            mint_address = mint_nft(seller_kp)
-            broadcast_event("log", {"msg": f"[Blind] NFT minted: {mint_address[:20]}..."})
-            broadcast_event("mp_log", {"msg": f"NFT minted: {mint_address}"})
+            seller_pubkey = str(seller_kp.pubkey())
+            _mp(f"  Step 2/6: Seller loaded: {seller_pubkey}")
+        except Exception as e:
+            _log(f"WALLET LOAD FAILED: {e}")
+            _mp(f"  FATAL: Could not load seller wallet: {e}")
+            _mp(f"  Wallet input length: {len(wallet)} chars")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            broadcast_event("error", {"msg": f"Blind wallet load failed: {str(e)[:80]}"})
+            return
 
+        try:
+            _mp(f"  Step 3/6: Minting NFT on devnet...")
+            _mp(f"    Seller: {seller_pubkey}")
+            mint_address = mint_nft(seller_kp)
+            _log(f"NFT minted: {mint_address}")
+            _mp(f"  Step 3/6: NFT minted OK: {mint_address}")
+            _mp(f"    Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
+        except Exception as e:
+            _log(f"MINT FAILED: {e}")
+            _mp(f"  FATAL: NFT mint failed: {e}")
+            _mp(f"  This usually means insufficient SOL or RPC error")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            broadcast_event("error", {"msg": f"NFT mint failed: {str(e)[:80]}"})
+            return
+
+        try:
+            _mp(f"  Step 4/6: Building package JSON...")
             sk = SigningKey(pv_bytes)
             pb_bytes = bytes(sk.verify_key)
             privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+            _mp(f"    Private key encoded: {privkey_b58[:8]}...{privkey_b58[-8:]} ({len(privkey_b58)} chars)")
 
             package_json = {
                 "vanityAddress": pubkey,
                 "privateKey": privkey_b58,
                 "mintAddress": mint_address,
-                "sellerAddress": str(seller_kp.pubkey()),
+                "sellerAddress": seller_pubkey,
                 "encryptedInTEE": False,
             }
             if vanity_word:
                 package_json["vanityWord"] = vanity_word
             if price_sol and float(price_sol) > 0:
                 package_json["priceLamports"] = int(float(price_sol) * 1_000_000_000)
+                _mp(f"    Price: {price_display} ({package_json['priceLamports']} lamports)")
 
+            import json as _json
+            json_size = len(_json.dumps(package_json))
+            _mp(f"  Step 4/6: Package built OK ({json_size} bytes, {len(package_json)} fields)")
+            _mp(f"    Fields: {list(package_json.keys())}")
+        except Exception as e:
+            _log(f"PACKAGE BUILD FAILED: {e}")
+            _mp(f"  FATAL: Failed to build package: {e}")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            broadcast_event("error", {"msg": f"Package build failed: {str(e)[:80]}"})
+            return
+
+        try:
+            _mp(f"  Step 5/6: Deriving PDA...")
             vanity_pubkey = Pubkey.from_string(pubkey)
+            _mp(f"    Vanity pubkey: {vanity_pubkey}")
+        except Exception as e:
+            _log(f"PDA DERIVATION FAILED: {e}")
+            _mp(f"  FATAL: Could not derive PDA: {e}")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            return
+
+        try:
+            _mp(f"  Step 6/6: Uploading package to Solana devnet PDA...")
+            _mp(f"    Sending transaction...")
             result = upload_package(
                 seller_kp=seller_kp,
                 vanity_pubkey=vanity_pubkey,
@@ -240,23 +319,27 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
             sig = result.get("signature", "")
             pda = result.get("pda", "")
             explorer_url = result.get("explorer_url", "")
-            nft_url = f"https://explorer.solana.com/address/{mint_address}?cluster=devnet" if mint_address else ""
-            price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
-            broadcast_event("log", {"msg": f"[Blind] SUCCESS: {pubkey[:20]}... uploaded ({price_display})"})
-            broadcast_event("mp_log", {"msg": f"SUCCESS: Uploaded {pubkey}"})
-            broadcast_event("mp_log", {"msg": f"  NFT Mint: {mint_address}"})
-            broadcast_event("mp_log", {"msg": f"  PDA: {pda}"})
-            broadcast_event("mp_log", {"msg": f"  Price: {price_display}"})
-            broadcast_event("mp_log", {"msg": f"  TX: {sig}"})
-            broadcast_event("mp_log", {"msg": f"  Explorer: {explorer_url}"})
-            if nft_url:
-                broadcast_event("mp_log", {"msg": f"  NFT Explorer: {nft_url}"})
-            if vanity_word:
-                broadcast_event("mp_log", {"msg": f"  Word: {vanity_word}"})
+            nft_url = f"https://explorer.solana.com/address/{mint_address}?cluster=devnet"
+
+            _log(f"SUCCESS: {pubkey[:20]}... uploaded ({price_display})")
+            _mp(f"  Step 6/6: Upload SUCCESS")
+            _mp(f"=== UPLOAD COMPLETE ===")
+            _mp(f"  Vanity Address: {pubkey}")
+            _mp(f"  Word: {vanity_word or '(none)'}")
+            _mp(f"  NFT Mint: {mint_address}")
+            _mp(f"  PDA: {pda}")
+            _mp(f"  Price: {price_display}")
+            _mp(f"  TX Signature: {sig}")
+            _mp(f"  TX Explorer: {explorer_url}")
+            _mp(f"  NFT Explorer: {nft_url}")
+            _mp(f"========================")
         except Exception as e:
-            broadcast_event("log", {"msg": f"[Blind] FAILED: {str(e)[:60]}"})
-            broadcast_event("mp_log", {"msg": f"FAILED: Upload for {pubkey}: {e}"})
-            broadcast_event("error", {"msg": f"Blind upload failed for {pubkey[:20]}...: {str(e)[:80]}"})
+            _log(f"UPLOAD TX FAILED: {e}")
+            _mp(f"  FATAL: Upload transaction failed: {e}")
+            _mp(f"  NFT was minted ({mint_address}) but package was NOT uploaded")
+            _mp(f"  The NFT exists on-chain but has no associated package data")
+            _mp(f"  Traceback: {_tb.format_exc()}")
+            broadcast_event("error", {"msg": f"Upload TX failed (NFT orphaned): {str(e)[:80]}"})
 
     t = threading.Thread(target=_upload, daemon=True)
     t.start()
@@ -543,17 +626,28 @@ def api_marketplace_search():
 
 @app.route("/api/marketplace/buy", methods=["POST"])
 def api_marketplace_buy():
+    import traceback as _tb
+    buy_log = logging.getLogger("marketplace.buy")
     data = request.json or {}
     buyer_key = data.get("buyer_key", "").strip()
     encrypted_json = data.get("encrypted_json")
     mint_address = data.get("mint_address", "")
     vanity_address = data.get("vanity_address", "")
 
+    buy_log.info("=== BUY & BURN START ===")
+    buy_log.info("  Vanity: %s", vanity_address)
+    buy_log.info("  Mint: %s", mint_address)
+    buy_log.info("  Buyer key provided: %s (%d chars)", "yes" if buyer_key else "no", len(buyer_key))
+    buy_log.info("  encrypted_json keys: %s", list((encrypted_json or {}).keys()))
+
     if not buyer_key:
+        buy_log.error("  ABORT: No buyer key")
         return jsonify({"error": "Buyer private key required"}), 400
     if not encrypted_json:
+        buy_log.error("  ABORT: No encrypted data")
         return jsonify({"error": "No encrypted data"}), 400
     if not mint_address:
+        buy_log.error("  ABORT: No mint address")
         return jsonify({"error": "No NFT mint address"}), 400
 
     try:
@@ -561,50 +655,79 @@ def api_marketplace_buy():
         from core.marketplace.nft import burn_nft, check_nft_supply, check_token_balance, transfer_nft
         from solders.pubkey import Pubkey as SoldersPubkey
 
+        buy_log.info("  Step 1: Checking NFT supply...")
         supply = check_nft_supply(mint_address)
+        buy_log.info("  Step 1: Supply = %d", supply)
         if supply == 0:
+            buy_log.error("  ABORT: NFT already burned")
             return jsonify({"error": "NFT already burned — key was already sold"}), 400
 
+        buy_log.info("  Step 2: Loading buyer keypair...")
         buyer_kp = load_seller_keypair(buyer_key)
+        buy_log.info("  Step 2: Buyer pubkey = %s", buyer_kp.pubkey())
 
         price_lamports = int(encrypted_json.get("priceLamports", 0))
         seller_addr = encrypted_json.get("sellerAddress", "")
         payment_sig = None
+        buy_log.info("  Price: %d lamports (%.4f SOL), Seller: %s", price_lamports, price_lamports / 1e9, seller_addr or "(none)")
 
         if price_lamports > 0 and seller_addr:
+            buy_log.info("  Step 3: SOL payment required, checking balance...")
             seller_pubkey = SoldersPubkey.from_string(seller_addr)
             from solana.rpc.api import Client as SolClient
             from solana.rpc.commitment import Confirmed as SolConfirmed
             sol_client = SolClient("https://api.devnet.solana.com")
             buyer_balance = sol_client.get_balance(buyer_kp.pubkey(), SolConfirmed).value
+            buy_log.info("  Step 3: Buyer balance = %d lamports (%.4f SOL)", buyer_balance, buyer_balance / 1e9)
             if buyer_balance < price_lamports + 10_000:
                 sol_needed = price_lamports / 1_000_000_000
                 sol_have = buyer_balance / 1_000_000_000
+                buy_log.error("  ABORT: Insufficient funds (need %.4f, have %.4f)", sol_needed, sol_have)
                 return jsonify({"error": f"Insufficient SOL. Need {sol_needed:.4f} SOL + fees, have {sol_have:.4f} SOL"}), 400
 
+            buy_log.info("  Step 3: Transferring %d lamports to seller %s...", price_lamports, seller_addr)
             payment_sig = transfer_sol(buyer_kp, seller_pubkey, price_lamports)
+            buy_log.info("  Step 3: Payment sent, sig = %s", payment_sig)
+            buy_log.info("  Step 3: Waiting 2s for confirmation...")
             import time
             time.sleep(2)
+        else:
+            buy_log.info("  Step 3: No payment required (free)")
 
+        buy_log.info("  Step 4: Checking buyer NFT balance...")
         balance = check_token_balance(buyer_kp.pubkey(), mint_address)
+        buy_log.info("  Step 4: Buyer NFT balance = %d", balance)
         if balance == 0:
             if seller_addr:
                 seller_key_env = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
                 if seller_key_env:
+                    buy_log.info("  Step 4: Transferring NFT from seller to buyer...")
                     seller_kp_for_transfer = load_seller_keypair(seller_key_env)
                     transfer_nft(seller_kp_for_transfer, buyer_kp.pubkey(), mint_address)
+                    buy_log.info("  Step 4: NFT transferred to buyer")
                 else:
+                    buy_log.error("  ABORT: Buyer doesn't own NFT and no seller key available")
                     return jsonify({"error": "You don't own this NFT. Transfer it first."}), 400
+            else:
+                buy_log.error("  ABORT: Buyer doesn't own NFT and no seller address in package")
+                return jsonify({"error": "You don't own this NFT. Transfer it first."}), 400
 
+        buy_log.info("  Step 5: Burning NFT %s...", mint_address)
         burn_sig = burn_nft(buyer_kp, mint_address)
+        buy_log.info("  Step 5: NFT burned, sig = %s", burn_sig)
 
         privkey = encrypted_json.get("privateKey", "")
         if not privkey:
+            buy_log.info("  Step 6: No plaintext key, attempting Lit decryption...")
             try:
                 from core.marketplace.lit_encrypt import decrypt_private_key
                 privkey = decrypt_private_key(encrypted_json)
+                buy_log.info("  Step 6: Lit decryption succeeded")
             except Exception as e:
+                buy_log.warning("  Step 6: Lit decryption failed: %s", e)
                 privkey = f"(decryption unavailable: {str(e)[:60]})"
+        else:
+            buy_log.info("  Step 6: Plaintext key found in package (%d chars)", len(privkey))
 
         out_dir = Path("decrypted_keys")
         out_dir.mkdir(exist_ok=True)
@@ -619,6 +742,7 @@ def api_marketplace_buy():
             lines.append(f"Payment TX: {payment_sig}")
             lines.append(f"Price: {price_lamports} lamports ({price_lamports / 1e9:.4f} SOL)")
         out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        buy_log.info("  Step 7: Key saved to %s", out_file)
 
         result = {
             "ok": True,
@@ -629,8 +753,16 @@ def api_marketplace_buy():
         if payment_sig:
             result["payment_sig"] = payment_sig
             result["price_sol"] = price_lamports / 1_000_000_000
+        buy_log.info("=== BUY & BURN COMPLETE ===")
+        buy_log.info("  Burn sig: %s", burn_sig)
+        if payment_sig:
+            buy_log.info("  Payment sig: %s", payment_sig)
+        buy_log.info("  Key file: %s", out_file)
         return jsonify(result)
     except Exception as e:
+        buy_log.error("=== BUY & BURN FAILED ===")
+        buy_log.error("  Error: %s", e)
+        buy_log.error("  Traceback: %s", _tb.format_exc())
         return jsonify({"error": str(e)}), 500
 
 
