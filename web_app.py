@@ -9,6 +9,8 @@ import time
 import threading
 from pathlib import Path
 
+os.environ.setdefault("LIT_API_KEY", "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY=")
+
 from flask import Flask, render_template, request, jsonify, Response, send_file
 
 from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE

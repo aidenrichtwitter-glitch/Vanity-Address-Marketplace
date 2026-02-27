@@ -51,6 +51,8 @@ def _save_profile(data: dict):
 _load_dotenv()
 _load_profile()
 
+os.environ.setdefault("LIT_API_KEY", "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY=")
+
 os.environ.setdefault("PYOPENCL_CTX", "0:0")
 if sys.platform != "win32":
     os.environ.setdefault("DISPLAY", ":0")
