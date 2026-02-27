@@ -16,10 +16,11 @@ Suffix patterns are passed to the GPU via global memory buffers (not constant me
 Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capable GPU.**
 
 ## Architecture
-- `web_app.py` - Flask web UI server (port 5000) with SSE for real-time updates — primary interface in Replit
+- `web_app.py` - Flask web UI server (port 5000) with SSE for real-time updates — thin routes that call `core/backend.py`
 - `templates/index.html` - Web frontend with tabbed interface (Word Miner + Marketplace tabs)
 - `static/style.css` - Dark theme CSS matching the original Qt design
-- `gui.py` - PySide6 desktop GUI (used for Windows builds via PyInstaller)
+- `gui.py` - PySide6 desktop GUI (used for Windows builds via PyInstaller) — calls `core/backend.py` for all marketplace/bounty logic
+- `core/backend.py` - Shared backend module used by both web_app.py and gui.py; provides unified APIs for marketplace search, buy & burn, blind upload, and bounty board CRUD
 - `main.py` - CLI entry point (alternative to GUI)
 - `build.py` - PyInstaller build script to create standalone executable
 - `wordlist_3000.txt` - Default word list (3000 common English words, ~2000 Base58-valid)
