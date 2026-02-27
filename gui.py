@@ -957,11 +957,15 @@ class MainWindow(QMainWindow):
             self.mode_status_label.setText("Keys saved locally for your use")
             self.mode_status_label.setStyleSheet("font-size: 11px; color: #50e050; font-weight: bold; background: transparent; border: none;")
             self.upload_status_label.setText("")
+            self.wordlist_edit.setEnabled(True)
         else:
             self.mode_status_label.setText("Keys encrypted + uploaded to marketplace")
             self.mode_status_label.setStyleSheet("font-size: 11px; color: #e050e0; font-weight: bold; background: transparent; border: none;")
-            self.upload_status_label.setText("Blind Mode active")
+            self.upload_status_label.setText("Blind Mode active — wordlist disabled (uploads cost SOL)")
             self.upload_status_label.setStyleSheet("color: #e050e0; font-size: 11px; font-weight: bold; background: transparent;")
+            self.wordlist_edit.clear()
+            self.wordlist_edit.setEnabled(False)
+            self._load_word_count()
 
     def _load_seller_key_file(self):
         path, _ = QFileDialog.getOpenFileName(

@@ -27,13 +27,21 @@
                 </div>
                 <div class="field grow">
                     <span class="field-label">Output Directory</span>
-                    <input type="text" id="outputDir" value="./found_words">
+                    <div class="inline-row">
+                        <input type="text" id="outputDir" value="./found_words" style="flex:1">
+                        <button class="btn btn-secondary" onclick="browseDir()">Browse</button>
+                    </div>
                 </div>
             </div>
-            <div class="row">
+            <div class="row" id="wordlistRow">
                 <div class="field grow">
                     <span class="field-label">Word List (optional - uses built-in list if empty)</span>
-                    <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()">
+                    <div class="inline-row">
+                        <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()" style="flex:1">
+                        <input type="file" id="wordlistUpload" accept=".txt" style="display:none" onchange="handleWordlistUpload(this)">
+                        <button class="btn btn-secondary" onclick="document.getElementById('wordlistUpload').click()">Browse</button>
+                        <button class="btn btn-secondary" onclick="clearWordlist()">Clear</button>
+                    </div>
                 </div>
             </div>
             <div class="row">
@@ -189,6 +197,7 @@ function setMiningMode(mode) {
     const blindBtn = document.getElementById('blindModeBtn');
     const status = document.getElementById('modeStatus');
     const blindSection = document.getElementById('blindWalletSection');
+    const wordlistRow = document.getElementById('wordlistRow');
 
     if (mode === 'mine') {
         mineBtn.className = 'mode-btn active mine';
@@ -196,13 +205,47 @@ function setMiningMode(mode) {
         status.textContent = 'Keys saved locally for your use';
         status.className = 'mode-status mine';
         blindSection.classList.remove('visible');
+        wordlistRow.style.display = '';
     } else {
         mineBtn.className = 'mode-btn';
         blindBtn.className = 'mode-btn active blind';
         status.textContent = 'Keys encrypted + uploaded to marketplace';
         status.className = 'mode-status blind';
         blindSection.classList.add('visible');
+        wordlistRow.style.display = 'none';
+        document.getElementById('wordlistFile').value = '';
+        loadWordCount();
     }
+}
+
+function browseDir() {
+    const dir = prompt('Enter output directory path:', document.getElementById('outputDir').value);
+    if (dir !== null) document.getElementById('outputDir').value = dir;
+}
+
+function handleWordlistUpload(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch('/api/upload-wordlist', { method: 'POST', body: formData })
+        .then(r => r.json())
+        .then(d => {
+            if (d.error) {
+                appendLog('miningLog', 'Upload error: ' + d.error);
+            } else {
+                document.getElementById('wordlistFile').value = d.path;
+                loadWordCount();
+                appendLog('miningLog', 'Loaded wordlist: ' + d.filename);
+            }
+        })
+        .catch(e => appendLog('miningLog', 'Upload failed: ' + e));
+    input.value = '';
+}
+
+function clearWordlist() {
+    document.getElementById('wordlistFile').value = '';
+    loadWordCount();
 }
 
 function loadWordCount() {

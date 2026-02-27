@@ -267,6 +267,21 @@ def gpu_temp_monitor():
         time.sleep(2)
 
 
+@app.route("/api/upload-wordlist", methods=["POST"])
+def api_upload_wordlist():
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "No file selected"}), 400
+    upload_dir = Path("uploaded_wordlists")
+    upload_dir.mkdir(exist_ok=True)
+    safe_name = Path(f.filename).name
+    dest = upload_dir / safe_name
+    f.save(str(dest))
+    return jsonify({"path": str(dest), "filename": safe_name})
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
