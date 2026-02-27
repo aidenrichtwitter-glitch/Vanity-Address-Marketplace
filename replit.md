@@ -39,7 +39,7 @@ Defaults to `PYOPENCL_CTX=0:0` (platform 0, device 0). **Requires an OpenCL-capa
 - `core/marketplace/` - Blind vanity key marketplace module
   - `config.py` - On-chain program constants (program ID, PDA seed, instruction/account discriminators, RPC URL, Lit network)
   - `solana_client.py` - Solana devnet RPC client: PDA derivation, upload instruction building, transaction sending, package fetching/parsing
-  - `lit_encrypt.py` - Lit Protocol direct encryption/decryption using `solRpcConditions` with real Solana authSig; uses datil network; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
+  - `lit_encrypt.py` - Lit Protocol encryption/decryption using `solRpcConditions`; MUST use `datil` network (NOT `datil-dev` or `DatilDev` — only `datil` works); auto-patches `bundled_server.js` to remove hardcoded DatilDev auto-connect that crashes the Node.js sidecar; conditions include dummy `pdaInterface`/`pdaKey` to satisfy Lit SDK's strict Zod validator
   - `lit_action.js` - JavaScript Lit Action (optional, used for hash verification by buyers); SHA-256 hash stored on-chain when available
   - `nft.py` - SPL token NFT operations: mint (supply=1, decimals=0), transfer, burn, supply/balance checks
 
@@ -153,7 +153,7 @@ Decrypted keys are saved to `decrypted_keys/<vanity_address>.txt` containing:
 - **pyinstaller** - Build standalone executable
 - **solders** - Solana keypair/pubkey/instruction types
 - **solana** - Solana RPC client (solana-py)
-- **lit-python-sdk** - Lit Protocol encryption/decryption via bundled Node.js sidecar server (works on Windows; unreachable from Replit sandbox)
+- **lit-python-sdk** - Lit Protocol encryption/decryption via bundled Node.js sidecar server; IMPORTANT: only the `datil` network works (not `datil-dev`/`DatilDev`); requires Node.js v18+ on Windows; `lit_encrypt.py` auto-patches the bundled server to fix the hardcoded DatilDev auto-connect bug
 
 ## Building
 ```bash

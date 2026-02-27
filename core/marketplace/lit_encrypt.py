@@ -50,6 +50,53 @@ def get_lit_action_code() -> str:
     return _lit_action_code or ""
 
 
+def _patch_bundled_server():
+    import shutil
+    import tempfile
+
+    from lit_python_sdk.server import NodeServer
+    orig_path = NodeServer(3092).server_path
+
+    if not orig_path.exists():
+        return None
+
+    patched_path = Path(tempfile.gettempdir()) / "lit_bundled_server_patched.js"
+
+    if patched_path.exists() and patched_path.stat().st_mtime >= orig_path.stat().st_mtime:
+        return patched_path
+
+    original = orig_path.read_text(encoding="utf-8")
+
+    old_listen = (
+        'app.listen(port, async () => {\n'
+        '  app.locals.litNodeClient = new import_lit_node_client_nodejs.LitNodeClientNodeJs({\n'
+        '    litNetwork: import_constants2.LIT_NETWORK.DatilDev\n'
+        '  });\n'
+        '  await app.locals.litNodeClient.connect();\n'
+        '  console.log(`Server is running at http://localhost:${port}`);\n'
+        '});'
+    )
+    new_listen = (
+        'app.listen(port, async () => {\n'
+        '  app.locals.litNodeClient = new import_lit_node_client_nodejs.LitNodeClientNodeJs({\n'
+        '    litNetwork: "datil"\n'
+        '  });\n'
+        '  await app.locals.litNodeClient.connect();\n'
+        '  console.log(`Server is running at http://localhost:${port}`);\n'
+        '});'
+    )
+
+    if old_listen in original:
+        patched = original.replace(old_listen, new_listen)
+        logger.info("Patched bundled_server.js: changed DatilDev -> datil")
+    else:
+        patched = original
+        logger.warning("Could not find auto-connect block in bundled_server.js — using original")
+
+    patched_path.write_text(patched, encoding="utf-8")
+    return patched_path
+
+
 def _get_lit_client():
     global _lit_client
     with _lit_lock:
@@ -70,20 +117,32 @@ def _get_lit_client():
                 node_ver = "unknown"
             logger.info("Node.js found: %s (%s)", node_path, node_ver)
 
+            patched_path = _patch_bundled_server()
+
             from lit_python_sdk import LitClient
+            from lit_python_sdk.server import NodeServer
+
+            if patched_path and patched_path.exists():
+                _orig_server_path = NodeServer.__init__
+
+                def _patched_init(srv_self, port):
+                    _orig_server_path(srv_self, port)
+                    srv_self.server_path = patched_path
+
+                NodeServer.__init__ = _patched_init
 
             orig_wait = LitClient._wait_for_server
-            LitClient._wait_for_server = lambda self, timeout=60: orig_wait(self, timeout=timeout)
+            LitClient._wait_for_server = lambda self, timeout=90: orig_wait(self, timeout=timeout)
 
-            from lit_python_sdk.server import NodeServer
-            _orig_node_start = NodeServer.start
             _captured_server = [None]
+            _orig_node_start = NodeServer.start
 
             def _capturing_start(srv_self):
                 _captured_server[0] = srv_self
                 return _orig_node_start(srv_self)
 
             NodeServer.start = _capturing_start
+
             try:
                 _lit_client = LitClient()
             except (TimeoutError, Exception) as exc:
@@ -104,6 +163,11 @@ def _get_lit_client():
             finally:
                 LitClient._wait_for_server = orig_wait
                 NodeServer.start = _orig_node_start
+                if patched_path:
+                    try:
+                        NodeServer.__init__ = _orig_server_path
+                    except Exception:
+                        pass
 
             srv = _captured_server[0]
             if srv and hasattr(srv, "get_logs"):
@@ -111,6 +175,7 @@ def _get_lit_client():
                 if startup_logs.strip():
                     logger.info("Lit server startup logs:\n%s", startup_logs[-2000:])
 
+            logger.info("Connecting to Lit network: %s ...", LIT_NETWORK)
             _lit_client.new(lit_network=LIT_NETWORK)
             _lit_client.connect()
             logger.info("Lit Protocol client connected (network: %s)", LIT_NETWORK)
