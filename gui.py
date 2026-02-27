@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QTextEdit,
-    QFileDialog, QSplitter, QSlider, QFrame,
+    QFileDialog, QSplitter, QSlider, QFrame, QTabWidget, QCheckBox,
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
@@ -165,6 +165,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
 
 class MiningSignals(QObject):
     found = Signal(str, str, str, int)
+    found_with_key = Signal(str, bytes)
     log = Signal(str)
     status = Signal(str)
     speed = Signal(float)
@@ -277,6 +278,7 @@ class MiningThread(threading.Thread):
                             self.signals.found.emit(
                                 pubkey, suffix_display, f"{elapsed:.1f}s", result_count,
                             )
+                            self.signals.found_with_key.emit(pubkey, pv_bytes)
                             self.signals.log.emit(
                                 f"[FOUND] #{result_count}: {pubkey} -> {suffix_display}"
                             )
@@ -333,10 +335,89 @@ class MainWindow(QMainWindow):
         )
         root.addWidget(header)
 
-        sub = QLabel("GPU-Accelerated Solana Vanity Address Mining  |  X-Padded Word Suffixes")
+        sub = QLabel("GPU-Accelerated Solana Vanity Address Mining  |  Blind Key Marketplace")
         sub.setAlignment(Qt.AlignCenter)
         sub.setStyleSheet("font-size: 11px; color: #7878a0; padding-bottom: 4px; background: transparent;")
         root.addWidget(sub)
+
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #3a3a5c;
+                border-radius: 4px;
+                background-color: #1b1b2f;
+            }
+            QTabBar::tab {
+                background-color: #222244;
+                border: 1px solid #3a3a5c;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                padding: 8px 20px;
+                color: #8888aa;
+                font-weight: bold;
+                min-width: 120px;
+            }
+            QTabBar::tab:selected {
+                background-color: #1b1b2f;
+                color: #6ea8fe;
+                border-bottom: 2px solid #6ea8fe;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #2a2a55;
+                color: #b0b0dd;
+            }
+        """)
+
+        mining_tab = self._build_mining_tab()
+        self.tabs.addTab(mining_tab, "Word Miner")
+
+        marketplace_tab = self._build_marketplace_tab()
+        self.tabs.addTab(marketplace_tab, "Marketplace")
+
+        root.addWidget(self.tabs)
+
+        self.signals = MiningSignals()
+        self.signals.found.connect(self._on_found)
+        self.signals.found_with_key.connect(self._on_found_with_key)
+        self.signals.log.connect(self._on_log)
+        self.signals.status.connect(self._on_status)
+        self.signals.speed.connect(self._on_speed)
+        self.signals.error.connect(self._on_error)
+        self.signals.stopped.connect(self._on_stopped)
+        self.signals.gpu_detected.connect(self._on_gpu_detected)
+
+        self.start_time = None
+        self.timer = QTimer()
+        self.timer.timeout.connect(self._update_elapsed)
+
+        self._total_keys = 0
+        self._last_speed_raw = 0.0
+        self._suffix_pattern_count = 0
+
+        self._word_count_timer = QTimer()
+        self._word_count_timer.setSingleShot(True)
+        self._word_count_timer.timeout.connect(self._do_load_word_count)
+
+        self._last_temp_value = None
+        self._last_temp_zone = None
+        self._temp_lock = threading.Lock()
+        self._gpu_detected = False
+
+        self._temp_thread = threading.Thread(target=self._temp_poll_loop, daemon=True)
+        self._temp_thread.start()
+
+        self.temp_timer = QTimer()
+        self.temp_timer.timeout.connect(self._apply_temp_display)
+        self.temp_timer.start(2000)
+
+        self._marketplace_auto_upload = False
+
+    def _build_mining_tab(self):
+        tab = QWidget()
+        root = QVBoxLayout(tab)
+        root.setSpacing(10)
+        root.setContentsMargins(10, 10, 10, 10)
 
         self.settings_toggle = QPushButton("▼  Mining Settings")
         self.settings_toggle.setStyleSheet("""
@@ -605,38 +686,297 @@ class MainWindow(QMainWindow):
         splitter.setSizes([340, 140])
         root.addWidget(splitter)
 
-        self.signals = MiningSignals()
-        self.signals.found.connect(self._on_found)
-        self.signals.log.connect(self._on_log)
-        self.signals.status.connect(self._on_status)
-        self.signals.speed.connect(self._on_speed)
-        self.signals.error.connect(self._on_error)
-        self.signals.stopped.connect(self._on_stopped)
-        self.signals.gpu_detected.connect(self._on_gpu_detected)
+        return tab
 
-        self.start_time = None
-        self.timer = QTimer()
-        self.timer.timeout.connect(self._update_elapsed)
+    def _build_marketplace_tab(self):
+        tab = QWidget()
+        root = QVBoxLayout(tab)
+        root.setSpacing(10)
+        root.setContentsMargins(10, 10, 10, 10)
 
-        self._total_keys = 0
-        self._last_speed_raw = 0.0
-        self._suffix_pattern_count = 0
+        seller_box = QGroupBox("Seller - Upload Encrypted Keys")
+        seller_layout = QVBoxLayout(seller_box)
+        seller_layout.setSpacing(8)
 
-        self._word_count_timer = QTimer()
-        self._word_count_timer.setSingleShot(True)
-        self._word_count_timer.timeout.connect(self._do_load_word_count)
+        wallet_row = QHBoxLayout()
+        wallet_row.setSpacing(8)
+        wallet_lbl = QLabel("Seller Wallet (base58 private key):")
+        wallet_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        wallet_row.addWidget(wallet_lbl)
+        self.seller_wallet_edit = QLineEdit()
+        self.seller_wallet_edit.setPlaceholderText("Paste base58 private key or set SOLANA_DEVNET_PRIVKEY env var")
+        self.seller_wallet_edit.setEchoMode(QLineEdit.Password)
+        env_key = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+        if env_key:
+            self.seller_wallet_edit.setText(env_key)
+        wallet_row.addWidget(self.seller_wallet_edit)
+        seller_layout.addLayout(wallet_row)
 
-        self._last_temp_value = None
-        self._last_temp_zone = None
-        self._temp_lock = threading.Lock()
-        self._gpu_detected = False
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(12)
+        self.auto_upload_check = QCheckBox("Auto-upload found keys to Solana devnet")
+        self.auto_upload_check.setStyleSheet("color: #c8c8e0; font-size: 12px; background: transparent;")
+        self.auto_upload_check.toggled.connect(self._on_auto_upload_toggled)
+        toggle_row.addWidget(self.auto_upload_check)
+        toggle_row.addStretch()
 
-        self._temp_thread = threading.Thread(target=self._temp_poll_loop, daemon=True)
-        self._temp_thread.start()
+        self.upload_status_label = QLabel("")
+        self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+        toggle_row.addWidget(self.upload_status_label)
+        seller_layout.addLayout(toggle_row)
 
-        self.temp_timer = QTimer()
-        self.temp_timer.timeout.connect(self._apply_temp_display)
-        self.temp_timer.start(2000)
+        info_lbl = QLabel(
+            "When enabled, each mined vanity key is encrypted with Lit Protocol and uploaded to a Solana devnet PDA. "
+            "The private key is never exposed - only buyers who meet the access conditions can decrypt it."
+        )
+        info_lbl.setWordWrap(True)
+        info_lbl.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent; padding: 4px 0;")
+        seller_layout.addWidget(info_lbl)
+
+        root.addWidget(seller_box)
+
+        buyer_box = QGroupBox("Buyer - Browse & Decrypt Packages")
+        buyer_layout = QVBoxLayout(buyer_box)
+        buyer_layout.setSpacing(8)
+
+        browse_row = QHBoxLayout()
+        browse_row.setSpacing(8)
+        self.browse_packages_btn = QPushButton("Browse Packages")
+        self.browse_packages_btn.setObjectName("browseBtn")
+        self.browse_packages_btn.setFixedWidth(160)
+        self.browse_packages_btn.clicked.connect(self._browse_packages)
+        browse_row.addWidget(self.browse_packages_btn)
+
+        self.packages_status_label = QLabel("Click 'Browse Packages' to fetch available vanity keys")
+        self.packages_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+        browse_row.addWidget(self.packages_status_label)
+        browse_row.addStretch()
+        buyer_layout.addLayout(browse_row)
+
+        self.packages_table = QTableWidget(0, 3)
+        self.packages_table.setHorizontalHeaderLabels(["Vanity Address", "PDA", "Data Size"])
+        self.packages_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.packages_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.packages_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.packages_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.packages_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.packages_table.setAlternatingRowColors(True)
+        self.packages_table.verticalHeader().setVisible(False)
+        buyer_layout.addWidget(self.packages_table)
+
+        decrypt_row = QHBoxLayout()
+        decrypt_row.setSpacing(8)
+        self.decrypt_btn = QPushButton("Decrypt Selected")
+        self.decrypt_btn.setObjectName("startBtn")
+        self.decrypt_btn.setFixedWidth(160)
+        self.decrypt_btn.clicked.connect(self._decrypt_selected)
+        decrypt_row.addWidget(self.decrypt_btn)
+
+        self.decrypt_status_label = QLabel("")
+        self.decrypt_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+        decrypt_row.addWidget(self.decrypt_status_label)
+        decrypt_row.addStretch()
+        buyer_layout.addLayout(decrypt_row)
+
+        result_row = QHBoxLayout()
+        result_row.setSpacing(8)
+        result_lbl = QLabel("Decrypted Key:")
+        result_lbl.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent;")
+        result_lbl.setFixedWidth(100)
+        result_row.addWidget(result_lbl)
+        self.decrypted_key_edit = QLineEdit()
+        self.decrypted_key_edit.setReadOnly(True)
+        self.decrypted_key_edit.setPlaceholderText("Decrypted private key will appear here")
+        result_row.addWidget(self.decrypted_key_edit)
+        buyer_layout.addLayout(result_row)
+
+        root.addWidget(buyer_box)
+
+        mp_log_box = QGroupBox("Marketplace Log")
+        mp_log_layout = QVBoxLayout(mp_log_box)
+        self.mp_log_text = QTextEdit()
+        self.mp_log_text.setReadOnly(True)
+        mp_log_layout.addWidget(self.mp_log_text)
+        root.addWidget(mp_log_box)
+
+        self._packages_data = []
+
+        return tab
+
+    def _on_auto_upload_toggled(self, checked):
+        self._marketplace_auto_upload = checked
+        if checked:
+            wallet = self.seller_wallet_edit.text().strip()
+            if not wallet:
+                self.auto_upload_check.setChecked(False)
+                self._mp_log("Auto-upload requires a seller wallet. Paste your base58 private key first.")
+                return
+            try:
+                from core.marketplace.solana_client import load_seller_keypair
+                kp = load_seller_keypair(wallet)
+                self._mp_log(f"Seller wallet validated: {kp.pubkey()}")
+            except Exception as e:
+                self.auto_upload_check.setChecked(False)
+                self._mp_log(f"Invalid seller key: {e}")
+                return
+            self._mp_log("Auto-upload enabled. Found vanity keys will be encrypted and uploaded to devnet.")
+            self.upload_status_label.setText("Auto-upload: ON")
+            self.upload_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
+        else:
+            self._mp_log("Auto-upload disabled.")
+            self.upload_status_label.setText("Auto-upload: OFF")
+            self.upload_status_label.setStyleSheet("color: #8888aa; font-size: 11px; background: transparent;")
+
+    def _mp_log(self, msg):
+        self.mp_log_text.append(msg)
+
+    def _browse_packages(self):
+        self.packages_status_label.setText("Fetching packages from devnet...")
+        self.browse_packages_btn.setEnabled(False)
+
+        def _fetch():
+            try:
+                from core.marketplace.solana_client import fetch_all_packages
+                packages = fetch_all_packages()
+                self._packages_data = packages
+                QTimer.singleShot(0, lambda: self._populate_packages(packages))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._on_browse_error(str(e)))
+
+        t = threading.Thread(target=_fetch, daemon=True)
+        t.start()
+
+    def _populate_packages(self, packages):
+        self.browse_packages_btn.setEnabled(True)
+        self.packages_table.setRowCount(0)
+
+        if not packages:
+            self.packages_status_label.setText("No packages found on devnet")
+            return
+
+        self.packages_status_label.setText(f"Found {len(packages)} package(s)")
+
+        for pkg in packages:
+            row = self.packages_table.rowCount()
+            self.packages_table.insertRow(row)
+
+            addr_item = QTableWidgetItem(pkg.get("vanity_address", "unknown"))
+            addr_item.setForeground(QColor(100, 230, 120))
+            self.packages_table.setItem(row, 0, addr_item)
+
+            pda_item = QTableWidgetItem(pkg.get("pda", ""))
+            pda_item.setForeground(QColor(160, 170, 240))
+            self.packages_table.setItem(row, 1, pda_item)
+
+            enc_json = pkg.get("encrypted_json", {})
+            size = len(str(enc_json))
+            size_item = QTableWidgetItem(f"{size} bytes")
+            self.packages_table.setItem(row, 2, size_item)
+
+    def _on_browse_error(self, err):
+        self.browse_packages_btn.setEnabled(True)
+        self.packages_status_label.setText(f"Error: {err[:60]}")
+        self._mp_log(f"Browse error: {err}")
+
+    def _decrypt_selected(self):
+        selected = self.packages_table.selectedItems()
+        if not selected:
+            self.decrypt_status_label.setText("Select a package first")
+            return
+
+        row = selected[0].row()
+        if row >= len(self._packages_data):
+            self.decrypt_status_label.setText("Invalid selection")
+            return
+
+        pkg = self._packages_data[row]
+        encrypted_json = pkg.get("encrypted_json")
+        if not encrypted_json:
+            self.decrypt_status_label.setText("No encrypted data in this package")
+            return
+
+        self.decrypt_status_label.setText("Decrypting with Lit Protocol...")
+        self.decrypt_btn.setEnabled(False)
+
+        def _do_decrypt():
+            try:
+                from core.marketplace.lit_encrypt import decrypt_private_key
+                result = decrypt_private_key(encrypted_json)
+                QTimer.singleShot(0, lambda: self._on_decrypt_success(result, pkg.get("vanity_address", "")))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._on_decrypt_error(str(e)))
+
+        t = threading.Thread(target=_do_decrypt, daemon=True)
+        t.start()
+
+    def _on_decrypt_success(self, privkey, vanity_address):
+        self.decrypt_btn.setEnabled(True)
+        self.decrypt_status_label.setText("Decryption successful!")
+        self.decrypt_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
+        self.decrypted_key_edit.setText(privkey)
+        self._mp_log(f"Decrypted key for vanity address: {vanity_address}")
+
+    def _on_decrypt_error(self, err):
+        self.decrypt_btn.setEnabled(True)
+        self.decrypt_status_label.setText(f"Decrypt failed: {err[:50]}")
+        self.decrypt_status_label.setStyleSheet("color: #ff5050; font-size: 11px; background: transparent;")
+        self._mp_log(f"Decryption error: {err}")
+
+    def _on_found_with_key(self, pubkey: str, pv_bytes: bytes):
+        if not self._marketplace_auto_upload:
+            return
+
+        wallet = self.seller_wallet_edit.text().strip()
+        if not wallet:
+            return
+
+        self._mp_log(f"Encrypting and uploading key for {pubkey}...")
+
+        def _upload():
+            try:
+                import base58 as b58_mod
+                from nacl.signing import SigningKey
+                from core.marketplace.solana_client import load_seller_keypair, upload_package
+                from core.marketplace.lit_encrypt import encrypt_private_key
+                from solders.pubkey import Pubkey
+
+                sk = SigningKey(pv_bytes)
+                pb_bytes = bytes(sk.verify_key)
+                privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+
+                encrypted_json = encrypt_private_key(
+                    privkey_b58=privkey_b58,
+                    vanity_address=pubkey,
+                )
+
+                seller_kp = load_seller_keypair(wallet)
+                vanity_pubkey = Pubkey.from_string(pubkey)
+
+                result = upload_package(
+                    seller_kp=seller_kp,
+                    vanity_pubkey=vanity_pubkey,
+                    encrypted_json=encrypted_json,
+                )
+
+                QTimer.singleShot(0, lambda: self._on_upload_success(result, pubkey))
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self._on_upload_error(str(e), pubkey))
+
+        t = threading.Thread(target=_upload, daemon=True)
+        t.start()
+
+    def _on_upload_success(self, result, pubkey):
+        sig = result.get("signature", "")
+        pda = result.get("pda", "")
+        url = result.get("explorer_url", "")
+        self._mp_log(f"Uploaded {pubkey} -> PDA: {pda}")
+        self._mp_log(f"  TX: {sig}")
+        self._mp_log(f"  Explorer: {url}")
+        self.upload_status_label.setText(f"Last upload: {pubkey[:12]}...")
+
+    def _on_upload_error(self, err, pubkey):
+        self._mp_log(f"Upload failed for {pubkey}: {err}")
+        self._mp_log("Key was saved locally. You can retry upload later.")
 
     def _load_word_count(self):
         self._word_count_timer.start(400)

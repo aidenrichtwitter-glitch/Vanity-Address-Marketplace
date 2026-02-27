@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["libsodium", "libxcrypt", "mesa_drivers", "ocl-icd", "opencl-headers", "libGL", "libxkbcommon", "xorg.libX11", "xorg.libXcursor", "xorg.libXi", "xorg.libXrandr", "fontconfig", "freetype", "qt6.qtbase", "xorg.libxcb", "xorg.libXext", "xorg.libXfixes", "xorg.libXrender", "dbus"]
+packages = ["dbus", "fontconfig", "freetype", "libGL", "libsodium", "libxcrypt", "libxkbcommon", "mesa_drivers", "ocl-icd", "opencl-headers", "qt6.qtbase", "xorg.libX11", "xorg.libXcursor", "xorg.libXext", "xorg.libXfixes", "xorg.libXi", "xorg.libXrandr", "xorg.libXrender", "xorg.libxcb"]
 
 [workflows]
 runButton = "Project"
