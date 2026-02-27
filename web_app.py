@@ -352,6 +352,11 @@ def api_start():
 
     _stop_event = threading.Event()
 
+    count_limit = 0
+    if mining_mode == "blind":
+        count_limit = len(word_filter.words)
+        broadcast_event("log", {"msg": f"[Blind] Will stop after finding {count_limit} addresses (one per word)"})
+
     with mining_lock:
         mining_state["running"] = True
         mining_state["status"] = "Starting..."
@@ -362,6 +367,7 @@ def api_start():
         mining_state["mining_mode"] = mining_mode
         mining_state["suffix_pattern_count"] = len(suffix_patterns)
         mining_state["blind_wallet"] = blind_wallet
+        mining_state["count_limit"] = count_limit
 
     broadcast_event("status", {"msg": "Starting..."})
 

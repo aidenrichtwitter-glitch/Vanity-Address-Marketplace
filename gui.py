@@ -1459,12 +1459,17 @@ class MainWindow(QMainWindow):
         self._last_speed_raw = 0.0
         self._suffix_pattern_count = len(suffix_patterns)
 
+        count_limit = 0
+        if self._mining_mode == "blind":
+            count_limit = len(word_filter.words)
+            self._on_log(f"[Blind] Will stop after finding {count_limit} addresses (one per word)")
+
         self.mining_thread = MiningThread(
             signals=self.signals,
             word_filter=word_filter,
             suffix_patterns=suffix_patterns,
             output_dir=output_dir,
-            count=0,
+            count=count_limit,
             iteration_bits=DEFAULT_ITERATION_BITS,
             power_pct=power_pct,
             max_temp=max_temp,

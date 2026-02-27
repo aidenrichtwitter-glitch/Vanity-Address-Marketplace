@@ -27,20 +27,20 @@
                 </div>
                 <div class="field grow">
                     <span class="field-label">Output Directory</span>
-                    <div class="inline-row">
-                        <input type="text" id="outputDir" value="./found_words" style="flex:1">
-                        <button class="btn btn-secondary" onclick="browseDir()">Browse</button>
+                    <div style="display:flex; gap:6px; align-items:center">
+                        <input type="text" id="outputDir" value="./found_words" style="flex:1; min-width:0">
+                        <button class="btn btn-secondary" onclick="browseDir()" style="flex-shrink:0">Browse</button>
                     </div>
                 </div>
             </div>
             <div class="row" id="wordlistRow">
                 <div class="field grow">
-                    <span class="field-label">Word List (optional - uses built-in list if empty)</span>
-                    <div class="inline-row">
-                        <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()" style="flex:1">
+                    <span class="field-label" id="wordlistLabel">Word List (optional - uses built-in list if empty)</span>
+                    <div style="display:flex; gap:6px; align-items:center">
+                        <input type="text" id="wordlistFile" placeholder="Default: wordlist_3000.txt (3000 common words)" onchange="loadWordCount()" style="flex:1; min-width:0">
                         <input type="file" id="wordlistUpload" accept=".txt" style="display:none" onchange="handleWordlistUpload(this)">
-                        <button class="btn btn-secondary" onclick="document.getElementById('wordlistUpload').click()">Browse</button>
-                        <button class="btn btn-secondary" onclick="clearWordlist()">Clear</button>
+                        <button class="btn btn-secondary" id="wordlistBrowseBtn" onclick="document.getElementById('wordlistUpload').click()" style="flex-shrink:0">Browse</button>
+                        <button class="btn btn-secondary" id="wordlistClearBtn" onclick="clearWordlist()" style="flex-shrink:0">Clear</button>
                     </div>
                 </div>
             </div>
@@ -205,15 +205,21 @@ function setMiningMode(mode) {
         status.textContent = 'Keys saved locally for your use';
         status.className = 'mode-status mine';
         blindSection.classList.remove('visible');
-        wordlistRow.style.display = '';
+        document.getElementById('wordlistFile').disabled = false;
+        document.getElementById('wordlistBrowseBtn').disabled = false;
+        document.getElementById('wordlistClearBtn').disabled = false;
+        document.getElementById('wordlistLabel').textContent = 'Word List (optional - uses built-in list if empty)';
     } else {
         mineBtn.className = 'mode-btn';
         blindBtn.className = 'mode-btn active blind';
         status.textContent = 'Keys encrypted + uploaded to marketplace';
         status.className = 'mode-status blind';
         blindSection.classList.add('visible');
-        wordlistRow.style.display = 'none';
         document.getElementById('wordlistFile').value = '';
+        document.getElementById('wordlistFile').disabled = true;
+        document.getElementById('wordlistBrowseBtn').disabled = true;
+        document.getElementById('wordlistClearBtn').disabled = true;
+        document.getElementById('wordlistLabel').textContent = 'Word List (locked to built-in list — uploads cost SOL)';
         loadWordCount();
     }
 }
