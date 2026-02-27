@@ -1,0 +1,241 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[Blind] === BLIND UPLOAD START for C36zjgvYtn4DhD5b... (X1eve1) ===
+[MP] --- Upload started for C36zjgvYtn4DhD5bTGtnhqcAisMANB3LgNxsfLX1eve1 (X1eve1) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Encoding private key...
+[MP]   Step 3/7: Private key encoded (88 chars)
+[MP]   Step 4/7: Encrypting private key with Lit Protocol (TEE)...
+[MP]     Connecting to Lit datil network...
+[INFO 2026-02-27 17:09:52,918] Encrypting private key for C36zjgvYtn4DhD5bTGtnhqcAisMANB3LgNxsfLX1eve1 via Chipotle TEE...
+[Blind] ABORT: Lit Protocol encryption failed — cannot upload without encryption: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   ABORT: Lit Protocol encryption failed: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   The private key will NOT be uploaded in plaintext.
+[MP]   Lit Protocol must be reachable for blind uploads to work securely.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 492, in _upload
+    encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 214, in encrypt_private_key
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 153, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+
+[Blind] === BLIND UPLOAD START for BVpGsXd9hDanb1Tj... (unab1e) ===
+[MP] --- Upload started for BVpGsXd9hDanb1TjeD298BVxuLcF5fCV8o5v5Yunab1e (unab1e) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Encoding private key...
+[MP]   Step 3/7: Private key encoded (88 chars)
+[MP]   Step 4/7: Encrypting private key with Lit Protocol (TEE)...
+[MP]     Connecting to Lit datil network...
+[INFO 2026-02-27 17:09:54,313] Encrypting private key for BVpGsXd9hDanb1TjeD298BVxuLcF5fCV8o5v5Yunab1e via Chipotle TEE...
+[Blind] ABORT: Lit Protocol encryption failed — cannot upload without encryption: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   ABORT: Lit Protocol encryption failed: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   The private key will NOT be uploaded in plaintext.
+[MP]   Lit Protocol must be reachable for blind uploads to work securely.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 492, in _upload
+    encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 214, in encrypt_private_key
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 153, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+
+[Blind] === BLIND UPLOAD START for D5YgDmqUVyFK8rNA... (Xsound) ===
+[MP] --- Upload started for D5YgDmqUVyFK8rNAfqvxipoemYHqF5zJKospaBXsound (Xsound) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Encoding private key...
+[MP]   Step 3/7: Private key encoded (87 chars)
+[MP]   Step 4/7: Encrypting private key with Lit Protocol (TEE)...
+[MP]     Connecting to Lit datil network...
+[INFO 2026-02-27 17:09:59,926] Encrypting private key for D5YgDmqUVyFK8rNAfqvxipoemYHqF5zJKospaBXsound via Chipotle TEE...
+[Blind] ABORT: Lit Protocol encryption failed — cannot upload without encryption: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   ABORT: Lit Protocol encryption failed: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+[MP]   The private key will NOT be uploaded in plaintext.
+[MP]   Lit Protocol must be reachable for blind uploads to work securely.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 492, in _upload
+    encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 214, in encrypt_private_key
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 153, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 404): <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="color-scheme" content="light dark">
+    <title>404 Not Found</title>
+</head>
+<body align="center">
+    <div role="main" align="center">
+        <h1>404: Not Found</h1>
+        <p>The requested resource could not be found.</p>
+        <hr />
+    </div>
+    <div role="contentinfo" align="center">
+        <small>Rocket</small>
+    </div>
+</body>
+</html>
+

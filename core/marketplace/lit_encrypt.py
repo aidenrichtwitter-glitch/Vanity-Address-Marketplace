@@ -139,15 +139,20 @@ def _run_lit_action(code: str) -> dict:
         "js_params": None,
     }
 
-    resp = requests.post(
-        url,
-        json=payload,
-        headers={
-            "Content-Type": "application/json",
-            "X-Api-Key": api_key,
-        },
-        timeout=60,
-    )
+    headers = {
+        "Content-Type": "application/json",
+        "X-Api-Key": api_key,
+    }
+
+    resp = requests.post(url, json=payload, headers=headers, timeout=60,
+                         allow_redirects=False)
+
+    if resp.status_code in (301, 302, 303, 307, 308):
+        redirect_url = resp.headers.get("Location", "")
+        if redirect_url:
+            logger.info("Following redirect to %s", redirect_url[:80])
+            resp = requests.post(redirect_url, json=payload, headers=headers,
+                                 timeout=60)
 
     if resp.status_code != 200:
         raise RuntimeError(
