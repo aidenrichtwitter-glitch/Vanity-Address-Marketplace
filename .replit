@@ -4,7 +4,7 @@ expertMode = true
 
 [nix]
 channel = "stable-25_05"
-packages = ["dbus", "fontconfig", "freetype", "libGL", "libsodium", "libxcrypt", "libxkbcommon", "mesa_drivers", "ocl-icd", "opencl-headers", "qt6.qtbase", "xorg.libX11", "xorg.libXcursor", "xorg.libXext", "xorg.libXfixes", "xorg.libXi", "xorg.libXrandr", "xorg.libXrender", "xorg.libxcb"]
+packages = ["dbus", "fontconfig", "freetype", "libGL", "libsodium", "libxcrypt", "libxkbcommon", "mesa_drivers", "ocl-icd", "opencl-headers", "qt6.qtbase", "xorg.libX11", "xorg.libXcursor", "xorg.libXext", "xorg.libXfixes", "xorg.libXi", "xorg.libXrandr", "xorg.libXrender", "xorg.libxcb", "xcb-util-cursor"]
 
 [workflows]
 runButton = "Project"
@@ -22,12 +22,12 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python gui.py"
-
 [workflows.workflow.metadata]
 outputType = "vnc"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null; Xvnc :1 -geometry 1280x800 -depth 24 -rfbport 5901 -SecurityTypes None -AlwaysShared & sleep 2 && DISPLAY=:1 LIBGL_ALWAYS_SOFTWARE=1 QT_QPA_PLATFORM=xcb LD_LIBRARY_PATH=/nix/store/18kvcdsa9n7grllb935fmw4xgfq5zabj-xcb-util-cursor-0.1.1-3-unstable-2017-04-05/lib:$LD_LIBRARY_PATH python gui.py"
 
 [[ports]]
 localPort = 3092
