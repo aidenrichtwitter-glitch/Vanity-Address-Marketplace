@@ -9,6 +9,18 @@ import time
 import threading
 from pathlib import Path
 
+_profile_path = Path("solvanity_profile.json")
+if _profile_path.exists():
+    try:
+        import json as _json_init
+        _profile_data = _json_init.loads(_profile_path.read_text(encoding="utf-8"))
+        for _k in ("LIT_API_KEY", "SOLANA_DEVNET_PRIVKEY"):
+            _v = _profile_data.get(_k, "").strip()
+            if _v and _k not in os.environ:
+                os.environ[_k] = _v
+    except Exception:
+        pass
+
 os.environ.setdefault("LIT_API_KEY", "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY=")
 
 from flask import Flask, render_template, request, jsonify, Response, send_file
@@ -730,6 +742,75 @@ def api_bounties_fulfill(bounty_id):
 
     broadcast_event("mp_log", {"msg": f"Bounty fulfilled: '{bounty['word']}' -> {vanity_address[:20]}..."})
     return jsonify({"ok": True, "bounty": bounty})
+
+
+_PROFILE_PATH = Path("solvanity_profile.json")
+
+
+def _load_web_profile():
+    if _PROFILE_PATH.exists():
+        try:
+            return json.loads(_PROFILE_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_web_profile(data: dict):
+    _PROFILE_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _mask_key(key: str) -> str:
+    if not key or len(key) < 8:
+        return ""
+    return key[:4] + "****" + key[-4:]
+
+
+@app.route("/api/settings/load")
+def api_settings_load():
+    default_lit = "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY="
+    lit_raw = os.environ.get("LIT_API_KEY", "")
+    seller_raw = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+    lit_is_default = lit_raw == default_lit
+    return jsonify({
+        "lit_key_masked": "" if lit_is_default else _mask_key(lit_raw),
+        "lit_key_present": bool(lit_raw) and not lit_is_default,
+        "seller_key_masked": _mask_key(seller_raw),
+        "seller_key_present": bool(seller_raw),
+    })
+
+
+@app.route("/api/settings/save", methods=["POST"])
+def api_settings_save():
+    data = request.json or {}
+    lit_key = data.get("lit_key", "").strip()
+    seller_key = data.get("seller_key", "").strip()
+    persist = data.get("persist", False)
+
+    if lit_key:
+        os.environ["LIT_API_KEY"] = lit_key
+    if seller_key:
+        os.environ["SOLANA_DEVNET_PRIVKEY"] = seller_key
+
+    if persist:
+        profile = {}
+        if lit_key:
+            profile["LIT_API_KEY"] = lit_key
+        if seller_key:
+            profile["SOLANA_DEVNET_PRIVKEY"] = seller_key
+        try:
+            _save_web_profile(profile)
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)})
+
+    return jsonify({"ok": True})
+
+
+@app.route("/api/settings/clear", methods=["POST"])
+def api_settings_clear():
+    if _PROFILE_PATH.exists():
+        _PROFILE_PATH.unlink()
+    return jsonify({"ok": True})
 
 
 @app.route("/download/source")

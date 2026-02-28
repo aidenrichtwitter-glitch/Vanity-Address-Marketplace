@@ -20,6 +20,7 @@
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('miner')">Word Miner</button>
         <button class="tab-btn" onclick="switchTab('marketplace')">Marketplace</button>
+        <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
     </div>
 
     <!-- WORD MINER TAB -->
@@ -216,6 +217,48 @@
             <div class="log-box" id="mpLog"></div>
         </div>
     </div>
+
+    <!-- SETTINGS TAB -->
+    <div id="tab-settings" class="tab-content">
+        <h3 style="color:#6ea8fe; margin:0 0 6px 0; font-size:16px;">Profile Settings</h3>
+        <p style="color:#9898b8; font-size:11px; margin:0 0 14px 0;">
+            Configure your API keys below. Click Save Profile to store them locally
+            so you don't have to enter them again.
+        </p>
+
+        <div class="group-box">
+            <div class="group-box-title">Lit Protocol API Key</div>
+            <p style="color:#7878a0; font-size:10px; margin:0 0 8px 0;">
+                Required for Blind Mode encryption. Create a free account at the Lit Protocol dashboard to get your own key.
+            </p>
+            <div class="inline-row" style="margin-bottom:8px">
+                <input type="password" id="settingsLitKey" placeholder="Enter your Lit Protocol API key" style="flex:1">
+                <button class="btn btn-secondary" onclick="toggleVisibility('settingsLitKey')" style="flex-shrink:0">Show</button>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-search" onclick="createLitAccount()" style="background:#2a6e9e; border-color:#4a9ade;">Create Free API Key</button>
+                <span id="litKeyStatus" style="font-size:10px; color:#7878a0;"></span>
+            </div>
+        </div>
+
+        <div class="group-box" style="margin-top:10px;">
+            <div class="group-box-title">Solana Devnet Seller Wallet</div>
+            <p style="color:#7878a0; font-size:10px; margin:0 0 8px 0;">
+                Default seller wallet for Blind Mode. Can also be set per-session in the Mining tab.
+            </p>
+            <div class="inline-row">
+                <input type="password" id="settingsSellerKey" placeholder="Enter your Solana devnet private key (Base58)" style="flex:1">
+                <button class="btn btn-secondary" onclick="toggleVisibility('settingsSellerKey')" style="flex-shrink:0">Show</button>
+            </div>
+        </div>
+
+        <div style="display:flex; gap:12px; margin-top:14px;">
+            <button class="btn btn-start" onclick="saveSettingsProfile()" style="padding:8px 20px;">Save Profile</button>
+            <button class="btn btn-search" onclick="applySettings()" style="padding:8px 20px;">Apply Now</button>
+            <button class="btn btn-secondary" onclick="clearSettingsProfile()" style="background:#6e2a2a; border-color:#e05050; color:#ffe0e0; padding:8px 20px;">Clear Profile</button>
+        </div>
+        <p id="settingsStatus" style="font-size:11px; color:#50e050; margin:6px 0 0 0;"></p>
+    </div>
 </div>
 
 <script>
@@ -229,14 +272,20 @@ let startTime = null;
 let elapsedTimer = null;
 
 function switchTab(tab) {
+    const tabs = ['miner', 'marketplace', 'settings'];
     document.querySelectorAll('.tab-btn').forEach((b, i) => {
-        b.classList.toggle('active', (tab === 'miner' && i === 0) || (tab === 'marketplace' && i === 1));
+        b.classList.toggle('active', tabs[i] === tab);
     });
-    document.getElementById('tab-miner').classList.toggle('active', tab === 'miner');
-    document.getElementById('tab-marketplace').classList.toggle('active', tab === 'marketplace');
+    tabs.forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if (el) el.classList.toggle('active', t === tab);
+    });
     if (tab === 'marketplace') {
         searchPackages();
         loadBounties();
+    }
+    if (tab === 'settings') {
+        loadSettingsProfile();
     }
 }
 
@@ -1053,6 +1102,101 @@ loadWordCount();
 loadBounties();
 connectSSE();
 setComputeMode('cpu');
+
+function createLitAccount() {
+    window.open('https://dashboard.dev.litprotocol.com', '_blank');
+    document.getElementById('litKeyStatus').textContent = 'Dashboard opened — copy your API key and paste it above, then click Save Profile.';
+    document.getElementById('litKeyStatus').style.color = '#6ea8fe';
+}
+
+function loadSettingsProfile() {
+    fetch('/api/settings/load')
+        .then(r => r.json())
+        .then(d => {
+            const litInput = document.getElementById('settingsLitKey');
+            const litStatus = document.getElementById('litKeyStatus');
+            if (d.lit_key_present) {
+                litInput.placeholder = 'Key set: ' + d.lit_key_masked + ' (enter new value to change)';
+                litStatus.textContent = 'API key is configured';
+                litStatus.style.color = '#50e050';
+            } else {
+                litInput.placeholder = 'Enter your Lit Protocol API key';
+                litStatus.textContent = 'No personal API key set (using shared default)';
+                litStatus.style.color = '#e0a050';
+            }
+            const sellerInput = document.getElementById('settingsSellerKey');
+            if (d.seller_key_present) {
+                sellerInput.placeholder = 'Key set: ' + d.seller_key_masked + ' (enter new value to change)';
+            }
+        })
+        .catch(() => {});
+}
+
+function saveSettingsProfile() {
+    const litKey = document.getElementById('settingsLitKey').value.trim();
+    const sellerKey = document.getElementById('settingsSellerKey').value.trim();
+    fetch('/api/settings/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lit_key: litKey, seller_key: sellerKey, persist: true})
+    })
+    .then(r => r.json())
+    .then(d => {
+        const el = document.getElementById('settingsStatus');
+        if (d.ok) {
+            el.textContent = 'Profile saved and applied to current session.';
+            el.style.color = '#50e050';
+            document.getElementById('litKeyStatus').textContent = 'Saved to profile';
+            document.getElementById('litKeyStatus').style.color = '#50e050';
+        } else {
+            el.textContent = 'Save failed: ' + (d.error || 'unknown');
+            el.style.color = '#e05050';
+        }
+    })
+    .catch(e => {
+        document.getElementById('settingsStatus').textContent = 'Save failed: ' + e;
+        document.getElementById('settingsStatus').style.color = '#e05050';
+    });
+}
+
+function applySettings() {
+    const litKey = document.getElementById('settingsLitKey').value.trim();
+    const sellerKey = document.getElementById('settingsSellerKey').value.trim();
+    fetch('/api/settings/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({lit_key: litKey, seller_key: sellerKey, persist: false})
+    })
+    .then(r => r.json())
+    .then(d => {
+        const el = document.getElementById('settingsStatus');
+        if (d.ok) {
+            el.textContent = 'Settings applied to current session (not saved to disk).';
+            el.style.color = '#50e050';
+        } else {
+            el.textContent = 'Apply failed: ' + (d.error || 'unknown');
+            el.style.color = '#e05050';
+        }
+    })
+    .catch(e => {
+        document.getElementById('settingsStatus').textContent = 'Apply failed: ' + e;
+        document.getElementById('settingsStatus').style.color = '#e05050';
+    });
+}
+
+function clearSettingsProfile() {
+    fetch('/api/settings/clear', {method: 'POST'})
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('settingsLitKey').value = '';
+            document.getElementById('settingsSellerKey').value = '';
+            document.getElementById('litKeyStatus').textContent = '';
+            const el = document.getElementById('settingsStatus');
+            el.textContent = 'Profile cleared.';
+            el.style.color = '#e0a050';
+        })
+        .catch(() => {});
+}
 
 fetch('/api/status')
     .then(r => r.json())

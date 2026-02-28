@@ -1431,12 +1431,29 @@ class MainWindow(QMainWindow):
         api_row.addWidget(lit_show_btn)
         api_layout.addLayout(api_row)
 
+        create_key_row = QHBoxLayout()
+        create_key_row.setSpacing(8)
+        create_key_btn = QPushButton("Create Free API Key")
+        create_key_btn.setFixedWidth(170)
+        create_key_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a6e9e; border: 2px solid #4a9ade;
+                border-radius: 6px; color: #e0f0ff; font-weight: bold;
+                font-size: 12px; padding: 6px 14px;
+            }
+            QPushButton:hover { background-color: #3a8ebe; }
+        """)
+        create_key_btn.clicked.connect(self._open_lit_dashboard)
+        create_key_row.addWidget(create_key_btn)
+
         self.lit_key_status = QLabel("")
         self.lit_key_status.setStyleSheet("font-size: 10px; background: transparent;")
         if existing_lit:
             self.lit_key_status.setText("Loaded from profile/environment")
             self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
-        api_layout.addWidget(self.lit_key_status)
+        create_key_row.addWidget(self.lit_key_status)
+        create_key_row.addStretch()
+        api_layout.addLayout(create_key_row)
         root.addWidget(api_box)
 
         wallet_box = QGroupBox("Solana Devnet Seller Wallet")
@@ -1535,6 +1552,13 @@ class MainWindow(QMainWindow):
         scroll.setWidget(inner)
         outer.addWidget(scroll)
         return tab
+
+    def _open_lit_dashboard(self):
+        from PySide6.QtGui import QDesktopServices
+        from PySide6.QtCore import QUrl
+        QDesktopServices.openUrl(QUrl("https://dashboard.dev.litprotocol.com"))
+        self.lit_key_status.setText("Dashboard opened \u2014 copy your API key and paste it above, then Save Profile.")
+        self.lit_key_status.setStyleSheet("font-size: 10px; color: #6ea8fe; background: transparent;")
 
     def _save_settings_profile(self):
         lit_key = self.settings_lit_key_edit.text().strip()
