@@ -48,7 +48,7 @@ class Searcher:
             hostbuf=self.setting.key32,
         )
         self.memobj_output = cl.Buffer(
-            self.context, cl.mem_flags.READ_WRITE, 33
+            self.context, cl.mem_flags.READ_WRITE, 65
         )
         self.memobj_occupied_bytes = cl.Buffer(
             self.context,
@@ -88,7 +88,7 @@ class Searcher:
             hostbuf=tee_buf,
         )
 
-        self.output = bytearray(33)
+        self.output = bytearray(65)
         self.kernel.set_arg(0, self.memobj_key32)
         self.kernel.set_arg(1, self.memobj_output)
         self.kernel.set_arg(2, self.memobj_occupied_bytes)
@@ -101,7 +101,7 @@ class Searcher:
 
     def find(self, log_stats: bool = True) -> bytearray:
         start_time = time.time()
-        self.output[:] = bytearray(33)
+        self.output[:] = bytearray(65)
         cl.enqueue_copy(self.command_queue, self.memobj_output, self.output)
         cl.enqueue_copy(self.command_queue, self.memobj_key32, self.setting.key32)
         global_work_size = self.setting.global_work_size // self.gpu_chunks
@@ -214,7 +214,7 @@ def save_result(
         if not output[0]:
             continue
         result_count += 1
-        pv_bytes = bytes(output[1:])
+        pv_bytes = bytes(output[1:33])
         target_dir = output_dir
         if pattern_dirs:
             pubkey = get_public_key_from_private_bytes(pv_bytes)

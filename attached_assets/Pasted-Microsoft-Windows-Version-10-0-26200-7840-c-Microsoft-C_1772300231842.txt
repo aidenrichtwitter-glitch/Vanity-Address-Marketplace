@@ -1,0 +1,76 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[INFO 2026-02-28 11:36:39,155] Running split-key setup in TEE (session=f1e3ff96)...
+[INFO 2026-02-28 11:36:39,769] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 11:36:41,023] Split-key setup complete, TEE point received
+[Blind] === BLIND UPLOAD START for 8anDhFni4xtPwUUX... (PpsznN) ===
+[MP] --- Upload started for 8anDhFni4xtPwUUXAyCxNYz1mxmhUgsJYheBtDPpsznN (PpsznN) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 11:36:53,040] Split-key encrypt in TEE for 8anDhFni4xtPwUUXAyCxNYz1mxmhUgsJYheBtDPpsznN...
+[INFO 2026-02-28 11:36:53,415] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 11:36:54,779] Split-key encryption successful for 8anDhFni4xtPwUUXAyCxNYz1mxmhUgsJYheBtDPpsznN
+[MP]   Step 4/7: Split-key encryption SUCCEEDED
+[MP]     splitKey: True
+[MP]     encryptedInTEE: True
+[MP]     litActionHash: d1b33e3fb612d730...
+[MP]     ciphertext length: 140
+[MP]   Step 5/7: Minting NFT on devnet...
+[MP]     Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[INFO 2026-02-28 11:36:54,780] [mint_nft] Starting mint for seller=4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever rpc=https://api.devnet.solana.com
+[INFO 2026-02-28 11:36:55,121] [mint_nft] New mint keypair: JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY
+[INFO 2026-02-28 11:36:55,122] [mint_nft] Getting rent exemption for 82 bytes...
+[INFO 2026-02-28 11:36:55,405] HTTP Request: POST https://api.devnet.solana.com "HTTP/1.1 200 OK"
+[INFO 2026-02-28 11:36:55,405] [mint_nft] Rent exemption: 1461600 lamports (0.001462 SOL)
+[INFO 2026-02-28 11:36:55,406] [mint_nft] Seller ATA: 5czDhiaTdba3tSsJMstFwjAScHUWKg19vJJXe5wKYdz8
+[INFO 2026-02-28 11:36:55,406] [mint_nft] Getting latest blockhash...
+[INFO 2026-02-28 11:36:55,468] HTTP Request: POST https://api.devnet.solana.com "HTTP/1.1 200 OK"
+[INFO 2026-02-28 11:36:55,469] [mint_nft] Blockhash: Dg7gfvAXdG6eVyzEumGXLPCQH1C8mtHiwSd4kWRChYms
+[INFO 2026-02-28 11:36:55,469] [mint_nft] Sending transaction (4 instructions: create_account, init_mint, create_ata, mint_to)...
+[INFO 2026-02-28 11:36:55,533] HTTP Request: POST https://api.devnet.solana.com "HTTP/1.1 200 OK"
+[INFO 2026-02-28 11:36:55,534] [mint_nft] SUCCESS: Minted NFT JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY (sig: 3vpZUSxJEnjgBJePfo5MkW6GuLJkrWtTcBKjgvYCnRWb9sXsAfP8jWCk6jcYRgh1bQxArroZGVvfnw8iFG4Gaj7H) cost: 1466600 lamports (0.001467 SOL)
+[Blind] NFT minted: JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY (cost: 0.001467 SOL)
+[MP]   Step 5/7: NFT minted OK: JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY
+[MP]     Mint cost: 0.001467 SOL (1466600 lamports)
+[MP]     Explorer: https://explorer.solana.com/address/JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY?cluster=devnet
+[MP]   Step 6/7: Building encrypted package JSON...
+[MP]     Price: 0.1000 SOL (100000000 lamports)
+[MP]   Step 6/7: Package built OK (1012 bytes, 15 fields)
+[MP]     Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+[MP]   Step 7/7: Uploading encrypted package to Solana devnet PDA...
+[MP]     Sending transaction...
+[INFO 2026-02-28 11:36:55,538] [upload_package] seller=4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever vanity=8anDhFni4xtPwUUXAyCxNYz1mxmhUgsJYheBtDPpsznN rpc=https://api.devnet.solana.com
+[INFO 2026-02-28 11:36:55,721] [upload_package] Package JSON size: 614 bytes
+[INFO 2026-02-28 11:36:55,722] [upload_package] PDA: 57bT4gT4uXYPVq8gy1S5Bt3uFQTqidYfk2sDPzR9x8j6
+[INFO 2026-02-28 11:36:55,722] [upload_package] Instruction built (data_len=658, accounts=3)
+[INFO 2026-02-28 11:36:55,722] [upload_package] Getting latest blockhash...
+[INFO 2026-02-28 11:36:55,896] HTTP Request: POST https://api.devnet.solana.com "HTTP/1.1 200 OK"
+[INFO 2026-02-28 11:36:55,897] [upload_package] Blockhash: 6GFYWKxKAWZQkiRxeZLY1eWYhXYVc16mAbB1sQguZQaB
+[INFO 2026-02-28 11:36:55,897] [upload_package] Sending upload transaction...
+[INFO 2026-02-28 11:36:55,959] HTTP Request: POST https://api.devnet.solana.com "HTTP/1.1 200 OK"
+[INFO 2026-02-28 11:36:55,959] [upload_package] SUCCESS: sig=5AoXTe9aFbYesP2fh6q4xokpJDBrdypZRVQECGshmhQwXfRdBeWgQFyCEEQYzbaPKc3fd7DoyKiTexpGDNeKsB2L pda=57bT4gT4uXYPVq8gy1S5Bt3uFQTqidYfk2sDPzR9x8j6
+[Blind] SUCCESS: 8anDhFni4xtPwUUXAyCx... uploaded (0.1000 SOL)
+[MP]   Step 7/7: Upload SUCCESS
+[MP] === UPLOAD COMPLETE (Lit Encrypted) ===
+[MP]   Vanity Address: 8anDhFni4xtPwUUXAyCxNYz1mxmhUgsJYheBtDPpsznN
+[MP]   Word: PpsznN
+[MP]   NFT Mint: JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY
+[MP]   PDA: 57bT4gT4uXYPVq8gy1S5Bt3uFQTqidYfk2sDPzR9x8j6
+[MP]   Price: 0.1000 SOL
+[MP]   Encrypted: YES (TEE)
+[MP]   TX Signature: 5AoXTe9aFbYesP2fh6q4xokpJDBrdypZRVQECGshmhQwXfRdBeWgQFyCEEQYzbaPKc3fd7DoyKiTexpGDNeKsB2L
+[MP]   TX Explorer: https://explorer.solana.com/tx/5AoXTe9aFbYesP2fh6q4xokpJDBrdypZRVQECGshmhQwXfRdBeWgQFyCEEQYzbaPKc3fd7DoyKiTexpGDNeKsB2L?cluster=devnet
+[MP]   NFT Explorer: https://explorer.solana.com/address/JEHEHARriF5AJQaSY2ykp7iJ35E17Mv11fwkCvMDpzgY?cluster=devnet
+[MP] ========================

@@ -54,14 +54,16 @@ Wrapping key: `HMAC-SHA256(api_key, "split-key-{session_id}")`
 
 ## Security: Hash-Pinned Code Verification
 The marketplace enforces code-signing hash verification to prevent tampered uploads:
-- The Lit Action templates (`_ENCRYPT_TEMPLATE`, `_SPLIT_KEY_SETUP_TEMPLATE`, `_SPLIT_KEY_ENCRYPT_TEMPLATE` in `lit_encrypt.py`) have a combined SHA-256 hash computed by `get_lit_action_hash()`.
-- When a package is uploaded, the hash of the actual code executed in the TEE is stored in the package as `litActionHash`.
-- On the buyer side, `_enrich_packages()` in `backend.py` compares the stored `litActionHash` against the known trusted hash.
-- Three verification states: "TEE Verified" (hash matches), "Unknown Code" (TEE encrypted but hash mismatch), "Unverified" (not TEE encrypted).
-- `search_packages()` filters out non-verified packages — they never appear in marketplace browse results.
-- `buy_nft()` and `burn_and_decrypt()` in `backend.py` reject packages with mismatched hashes before any transaction.
+- Each Lit Action template (`_ENCRYPT_TEMPLATE`, `_SPLIT_KEY_ENCRYPT_TEMPLATE`) has a stable SHA-256 hash computed from the raw template string via `_template_hash()`. These are stored as module-level constants `_ENCRYPT_HASH` and `_SPLIT_KEY_ENCRYPT_HASH`.
+- When a package is uploaded, the corresponding template hash is stored in the package as `litActionHash` (stable across calls, unlike the old approach which hashed fully-formatted code).
+- `get_trusted_template_hashes()` returns the set of all trusted template hashes. On the buyer side, `_enrich_packages()` and `_verify_package_hash()` in `backend.py` check if `litActionHash` is in this trusted set.
+- Three verification states: "TEE Verified" (hash in trusted set), "Unknown Code" (TEE encrypted but hash not recognized), "Unverified" (not TEE encrypted).
+- `buy_nft()` and `burn_and_decrypt()` in `backend.py` reject packages with unrecognized hashes before any transaction.
 - Both web UI and desktop GUI block purchase/burn of unverified packages with clear error messages.
 - Split-key packages provide stronger security than direct encryption: the miner never sees the full private key, eliminating the process-memory extraction attack vector.
+
+## GPU Output Buffer Format
+The OpenCL kernel output buffer is 65 bytes: `[match_length(1), seed(32), pubkey(32)]`. In split-key (TEE) mode, the GPU-computed public key bytes at offset 33-64 are used directly for address display, avoiding host-side re-derivation mismatches between the kernel's Ed25519 implementation and libsodium. If GPU pubkey bytes are all zero (fallback), host re-derives using `crypto_core_ed25519_add`.
 
 ## PyInstaller Build
 - `build.py` creates a standalone `solvanity.exe` (Windows) or `solvanity` (Linux) using PyInstaller `--onefile --windowed`.

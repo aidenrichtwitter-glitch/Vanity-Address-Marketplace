@@ -4056,11 +4056,17 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
       for (size_t j = 0; j < 32; j++) {
         out[j + 1] = key_base[j];
       }
+      for (size_t j = 0; j < 32; j++) {
+        out[j + 33] = public_key[j];
+      }
     }
     if (length < out[0]) {
       out[0] = length;
       for (size_t j = 0; j < 32; j++) {
         out[j + 1] = key_base[j];
+      }
+      for (size_t j = 0; j < 32; j++) {
+        out[j + 33] = public_key[j];
       }
     }
   }

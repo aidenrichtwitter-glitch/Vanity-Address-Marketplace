@@ -266,9 +266,13 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
                         continue
                     if msg["type"] == "found":
                         output = msg["data"]
-                        pv_bytes = bytes(output[1:])
+                        pv_bytes = bytes(output[1:33])
+                        gpu_pubkey_bytes = bytes(output[33:65])
                         tee_point = mining_state.get("tee_point")
-                        if tee_point:
+                        if tee_point and any(b != 0 for b in gpu_pubkey_bytes):
+                            from base58 import b58encode
+                            pubkey = b58encode(gpu_pubkey_bytes).decode()
+                        elif tee_point:
                             import hashlib
                             from base58 import b58encode
                             from nacl.bindings import (

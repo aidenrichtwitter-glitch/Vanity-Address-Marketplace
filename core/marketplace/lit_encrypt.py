@@ -397,10 +397,23 @@ def _run_lit_action(code: str, max_retries: int = 3) -> dict:
     return parsed
 
 
+def _template_hash(tmpl: str) -> str:
+    return hashlib.sha256(tmpl.encode("utf-8")).hexdigest()
+
+
+_SPLIT_KEY_ENCRYPT_HASH = _template_hash(_SPLIT_KEY_ENCRYPT_TEMPLATE)
+_ENCRYPT_HASH = _template_hash(_ENCRYPT_TEMPLATE)
+_TRUSTED_TEMPLATE_HASHES = {_SPLIT_KEY_ENCRYPT_HASH, _ENCRYPT_HASH}
+
+
 def get_lit_action_hash() -> str:
     combined = _ENCRYPT_TEMPLATE + _SPLIT_KEY_SETUP_TEMPLATE + _SPLIT_KEY_ENCRYPT_TEMPLATE
     code_hash = hashlib.sha256(combined.encode("utf-8")).hexdigest()
     return code_hash
+
+
+def get_trusted_template_hashes() -> set:
+    return set(_TRUSTED_TEMPLATE_HASHES)
 
 
 def get_lit_action_code() -> str:
@@ -518,7 +531,7 @@ def split_key_encrypt(
         "encryptedInTEE": True,
         "splitKey": True,
         "litNetwork": "chipotle-dev",
-        "litActionHash": _hash_executed_code(code),
+        "litActionHash": _SPLIT_KEY_ENCRYPT_HASH,
     }
 
     logger.info("Split-key encryption successful for %s", vanity_address)
@@ -566,7 +579,7 @@ def encrypt_private_key(
         "solRpcConditions": sol_rpc_conditions,
         "encryptedInTEE": True,
         "litNetwork": "chipotle-dev",
-        "litActionHash": _hash_executed_code(code),
+        "litActionHash": _ENCRYPT_HASH,
     }
 
     logger.info("Encryption successful for %s (hash: %s)", vanity_address, data_hash[:16])

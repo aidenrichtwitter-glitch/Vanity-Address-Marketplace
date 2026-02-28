@@ -23,25 +23,25 @@ _upload_lock = threading.Lock()
 _trusted_lit_hash_cache = None
 
 
-def _get_trusted_lit_hash():
+def _get_trusted_lit_hashes():
     global _trusted_lit_hash_cache
     if _trusted_lit_hash_cache is None:
         try:
-            from core.marketplace.lit_encrypt import get_lit_action_hash
-            _trusted_lit_hash_cache = get_lit_action_hash()
+            from core.marketplace.lit_encrypt import get_trusted_template_hashes
+            _trusted_lit_hash_cache = get_trusted_template_hashes()
         except Exception:
-            _trusted_lit_hash_cache = ""
+            _trusted_lit_hash_cache = set()
     return _trusted_lit_hash_cache
 
 
 def _verify_package_hash(encrypted_json):
     stored_hash = encrypted_json.get("litActionHash", "")
-    trusted = _get_trusted_lit_hash()
+    trusted = _get_trusted_lit_hashes()
     if not trusted:
         return False, "Could not compute trusted code hash"
     if not stored_hash:
         return False, "Package missing code hash — cannot verify integrity"
-    if stored_hash != trusted:
+    if stored_hash not in trusted:
         return False, "Package was encrypted by unverified code. Purchase blocked for your safety."
     return True, ""
 
@@ -132,7 +132,7 @@ def _enrich_packages(packages):
         tee_flag = enc_json.get("encryptedInTEE", False)
         if tee_flag:
             stored_hash = enc_json.get("litActionHash", "")
-            if stored_hash and stored_hash == _get_trusted_lit_hash():
+            if stored_hash and stored_hash in _get_trusted_lit_hashes():
                 pkg["verified"] = "TEE Verified"
             else:
                 pkg["verified"] = "Unknown Code"
