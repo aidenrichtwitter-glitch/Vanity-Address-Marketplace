@@ -21,8 +21,6 @@ if _profile_path.exists():
     except Exception:
         pass
 
-os.environ.setdefault("LIT_API_KEY", "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY=")
-
 from flask import Flask, render_template, request, jsonify, Response, send_file
 
 from core.word_filter import WordFilter, PAD_CHAR, TAIL_SIZE
@@ -768,13 +766,11 @@ def _mask_key(key: str) -> str:
 
 @app.route("/api/settings/load")
 def api_settings_load():
-    default_lit = "GK4rv4T/ZgPgVNBgIDwzKx1vdM8L/buH+748DqUhIEY="
     lit_raw = os.environ.get("LIT_API_KEY", "")
     seller_raw = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
-    lit_is_default = lit_raw == default_lit
     return jsonify({
-        "lit_key_masked": "" if lit_is_default else _mask_key(lit_raw),
-        "lit_key_present": bool(lit_raw) and not lit_is_default,
+        "lit_key_masked": _mask_key(lit_raw),
+        "lit_key_present": bool(lit_raw),
         "seller_key_masked": _mask_key(seller_raw),
         "seller_key_present": bool(seller_raw),
     })
