@@ -1,0 +1,432 @@
+--- Upload started for C8qUzynk4Bc9TPpd42HHZ4sQKpC3v87gMQX6EqXgrand (Xgrand) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+--- Upload started for 3pST26xYCMqBx5gnkNbGNZEf3dEpqEVGogBjb7gent1y (gent1y) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+--- Upload started for 8uS8jchfBnU2PhEgtxZ1YNa9D7r2zrERrtWyhqregion (region) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+--- Upload started for 7ZR6Y3Ev51sfaFfRLfqf8e3CZhATkDnizeuz8FXstorm (Xstorm) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+--- Upload started for 2HSRC5K2ybGWs3MdTxhvTVKA54pAC4qTHxhuffXXtake (XXtake) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: 6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: C8qUzynk4Bc9TPpd42HHZ4sQKpC3v87gMQX6EqXgrand
+  Word: Xgrand
+  NFT Mint: 6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW
+  PDA: B2NTNtQGtqdx4LqHNy5WzFcT8QshTZ3hQuEzAvq3RESR
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: HDKLounfXeMFvkNQwGfQ66AgtZ7yD7RAf1XWJb4hK7KbUTLPaowMFJNgCc18wqfW2G28dxU54aTnmcX85cgrH2Q
+  TX Explorer: https://explorer.solana.com/tx/HDKLounfXeMFvkNQwGfQ66AgtZ7yD7RAf1XWJb4hK7KbUTLPaowMFJNgCc18wqfW2G28dxU54aTnmcX85cgrH2Q?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW?cluster=devnet
+========================
+SUCCESS: Uploaded C8qUzynk4Bc9TPpd42HHZ4sQKpC3v87gMQX6EqXgrand
+  NFT Mint: 6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW
+  PDA: B2NTNtQGtqdx4LqHNy5WzFcT8QshTZ3hQuEzAvq3RESR
+  TX: HDKLounfXeMFvkNQwGfQ66AgtZ7yD7RAf1XWJb4hK7KbUTLPaowMFJNgCc18wqfW2G28dxU54aTnmcX85cgrH2Q
+  Explorer: https://explorer.solana.com/tx/HDKLounfXeMFvkNQwGfQ66AgtZ7yD7RAf1XWJb4hK7KbUTLPaowMFJNgCc18wqfW2G28dxU54aTnmcX85cgrH2Q?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/6baxVF23a2zsK2m2G2juorTSubqSXSii43LzggkAX4WW?cluster=devnet
+  Word: Xgrand
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: 96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 3pST26xYCMqBx5gnkNbGNZEf3dEpqEVGogBjb7gent1y
+  Word: gent1y
+  NFT Mint: 96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW
+  PDA: p3rQYmKG5X8Xeyjy6fcpiFT2ADVYY3BLwKGuJ3cANh2
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: NyEMUxUv4a1KzrQuFcrCDKWfqrknSC7xUiJ8xcpWg1gtiGdB9ZSgLSnu1t8JsgYd1woUYNcf1Ej18FxqAK3BY7f
+  TX Explorer: https://explorer.solana.com/tx/NyEMUxUv4a1KzrQuFcrCDKWfqrknSC7xUiJ8xcpWg1gtiGdB9ZSgLSnu1t8JsgYd1woUYNcf1Ej18FxqAK3BY7f?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW?cluster=devnet
+========================
+SUCCESS: Uploaded 3pST26xYCMqBx5gnkNbGNZEf3dEpqEVGogBjb7gent1y
+  NFT Mint: 96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW
+  PDA: p3rQYmKG5X8Xeyjy6fcpiFT2ADVYY3BLwKGuJ3cANh2
+  TX: NyEMUxUv4a1KzrQuFcrCDKWfqrknSC7xUiJ8xcpWg1gtiGdB9ZSgLSnu1t8JsgYd1woUYNcf1Ej18FxqAK3BY7f
+  Explorer: https://explorer.solana.com/tx/NyEMUxUv4a1KzrQuFcrCDKWfqrknSC7xUiJ8xcpWg1gtiGdB9ZSgLSnu1t8JsgYd1woUYNcf1Ej18FxqAK3BY7f?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/96JwEkBHt3PZieKMyc2UBpF5hiJ9g372XKFYeDsbvDVW?cluster=devnet
+  Word: gent1y
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 8uS8jchfBnU2PhEgtxZ1YNa9D7r2zrERrtWyhqregion
+  Word: region
+  NFT Mint: Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb
+  PDA: Gc6izRSuhUaj2rati4KjHXYurhCuoTkykhwEgUUpbtpv
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 2ZjFEoLe2Ns7cg9D4s2iuhfTGFhqQFbmzdbKrQVpLtXZ6pKgYA686Jq4YUgtArhK2k7RrKL99KWzTMDD1DsMNwjk
+  TX Explorer: https://explorer.solana.com/tx/2ZjFEoLe2Ns7cg9D4s2iuhfTGFhqQFbmzdbKrQVpLtXZ6pKgYA686Jq4YUgtArhK2k7RrKL99KWzTMDD1DsMNwjk?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb?cluster=devnet
+========================
+SUCCESS: Uploaded 8uS8jchfBnU2PhEgtxZ1YNa9D7r2zrERrtWyhqregion
+  NFT Mint: Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb
+  PDA: Gc6izRSuhUaj2rati4KjHXYurhCuoTkykhwEgUUpbtpv
+  TX: 2ZjFEoLe2Ns7cg9D4s2iuhfTGFhqQFbmzdbKrQVpLtXZ6pKgYA686Jq4YUgtArhK2k7RrKL99KWzTMDD1DsMNwjk
+  Explorer: https://explorer.solana.com/tx/2ZjFEoLe2Ns7cg9D4s2iuhfTGFhqQFbmzdbKrQVpLtXZ6pKgYA686Jq4YUgtArhK2k7RrKL99KWzTMDD1DsMNwjk?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/Fr8gkWrCAWagiq6Zhd7xAz4c1NFqSeQXUPTRotyNPdEb?cluster=devnet
+  Word: region
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 7ZR6Y3Ev51sfaFfRLfqf8e3CZhATkDnizeuz8FXstorm
+  Word: Xstorm
+  NFT Mint: AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L
+  PDA: 8k7Y9otWTGTYWyZ7D1g8TVSEZDvBhajF24pYKS526C78
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: AaDcSHbZuiMXLEZWMXUoC7uA7kMUagAynHt5Zn2RQvFhgA3SZxkoSATHTESbPnJvmQN7h35wfjYgZ9ZqYyUbJkg
+  TX Explorer: https://explorer.solana.com/tx/AaDcSHbZuiMXLEZWMXUoC7uA7kMUagAynHt5Zn2RQvFhgA3SZxkoSATHTESbPnJvmQN7h35wfjYgZ9ZqYyUbJkg?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L?cluster=devnet
+========================
+SUCCESS: Uploaded 7ZR6Y3Ev51sfaFfRLfqf8e3CZhATkDnizeuz8FXstorm
+  NFT Mint: AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L
+  PDA: 8k7Y9otWTGTYWyZ7D1g8TVSEZDvBhajF24pYKS526C78
+  TX: AaDcSHbZuiMXLEZWMXUoC7uA7kMUagAynHt5Zn2RQvFhgA3SZxkoSATHTESbPnJvmQN7h35wfjYgZ9ZqYyUbJkg
+  Explorer: https://explorer.solana.com/tx/AaDcSHbZuiMXLEZWMXUoC7uA7kMUagAynHt5Zn2RQvFhgA3SZxkoSATHTESbPnJvmQN7h35wfjYgZ9ZqYyUbJkg?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/AEBkECKLkMXQRr6KrnsZA76B7bj3s7rnfmxDVWEEdr5L?cluster=devnet
+  Word: Xstorm
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+--- Upload started for J6b1JiP3EtMHM2HY3Jw8GBQgQTkQXZ8MJH6hLSrecent (recent) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: 6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 2HSRC5K2ybGWs3MdTxhvTVKA54pAC4qTHxhuffXXtake
+  Word: XXtake
+  NFT Mint: 6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi
+  PDA: 6rkgD8ooFtP89z5iCJc9VwuXfqCkCg47sAGHky83KUb
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 45EKvhHWqtLsi5WbGYCK7GcdtgupS142y1rc72o4QbShcKcuGGJfhTy4N95rcuXJ3VCTKv6P1tjs7FDJnvG5nwPE
+  TX Explorer: https://explorer.solana.com/tx/45EKvhHWqtLsi5WbGYCK7GcdtgupS142y1rc72o4QbShcKcuGGJfhTy4N95rcuXJ3VCTKv6P1tjs7FDJnvG5nwPE?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi?cluster=devnet
+========================
+SUCCESS: Uploaded 2HSRC5K2ybGWs3MdTxhvTVKA54pAC4qTHxhuffXXtake
+  NFT Mint: 6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi
+  PDA: 6rkgD8ooFtP89z5iCJc9VwuXfqCkCg47sAGHky83KUb
+  TX: 45EKvhHWqtLsi5WbGYCK7GcdtgupS142y1rc72o4QbShcKcuGGJfhTy4N95rcuXJ3VCTKv6P1tjs7FDJnvG5nwPE
+  Explorer: https://explorer.solana.com/tx/45EKvhHWqtLsi5WbGYCK7GcdtgupS142y1rc72o4QbShcKcuGGJfhTy4N95rcuXJ3VCTKv6P1tjs7FDJnvG5nwPE?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/6WWMyQfGzCqsYpd9sBybTPr16HHEm6ncQ4f5Nwm4BjZi?cluster=devnet
+  Word: XXtake
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: J6b1JiP3EtMHM2HY3Jw8GBQgQTkQXZ8MJH6hLSrecent
+  Word: recent
+  NFT Mint: CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU
+  PDA: Dzcd7GrJyfdt9UWyxv3HfZ9Pgd2VboiLeAcKbv4hci1i
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 3AxiPiUkEueeL9BfrJo2NuYMdWChf5kQasD3aRo1RR4EBaXArikqetWgpiMTCRx88CxvEoKoFGuawAvweU8yJBDg
+  TX Explorer: https://explorer.solana.com/tx/3AxiPiUkEueeL9BfrJo2NuYMdWChf5kQasD3aRo1RR4EBaXArikqetWgpiMTCRx88CxvEoKoFGuawAvweU8yJBDg?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU?cluster=devnet
+========================
+SUCCESS: Uploaded J6b1JiP3EtMHM2HY3Jw8GBQgQTkQXZ8MJH6hLSrecent
+  NFT Mint: CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU
+  PDA: Dzcd7GrJyfdt9UWyxv3HfZ9Pgd2VboiLeAcKbv4hci1i
+  TX: 3AxiPiUkEueeL9BfrJo2NuYMdWChf5kQasD3aRo1RR4EBaXArikqetWgpiMTCRx88CxvEoKoFGuawAvweU8yJBDg
+  Explorer: https://explorer.solana.com/tx/3AxiPiUkEueeL9BfrJo2NuYMdWChf5kQasD3aRo1RR4EBaXArikqetWgpiMTCRx88CxvEoKoFGuawAvweU8yJBDg?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/CsqcV5fW8wbV2soWYjT7PZF49gK5SGAx46SiC1ggX2yU?cluster=devnet
+  Word: recent
+--- Upload started for 5Czc1MNQoZdY914PkiVGnoCq6CR5FRB6Jfpx6TXXneck (XXneck) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 5Czc1MNQoZdY914PkiVGnoCq6CR5FRB6Jfpx6TXXneck
+  Word: XXneck
+  NFT Mint: FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa
+  PDA: G7G5NKnq8mxMnxmbKZTgVy8prr2ym4455HDX1nGcxgKH
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 5yTWqzsaqcxJbJyzHDVVetsvHrUvwJnpPCnw2mBi4JScN2orePeHc7CQ6UcWQXopkoq1UybLP5n6XqnXPoFnEdJ2
+  TX Explorer: https://explorer.solana.com/tx/5yTWqzsaqcxJbJyzHDVVetsvHrUvwJnpPCnw2mBi4JScN2orePeHc7CQ6UcWQXopkoq1UybLP5n6XqnXPoFnEdJ2?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa?cluster=devnet
+========================
+SUCCESS: Uploaded 5Czc1MNQoZdY914PkiVGnoCq6CR5FRB6Jfpx6TXXneck
+  NFT Mint: FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa
+  PDA: G7G5NKnq8mxMnxmbKZTgVy8prr2ym4455HDX1nGcxgKH
+  TX: 5yTWqzsaqcxJbJyzHDVVetsvHrUvwJnpPCnw2mBi4JScN2orePeHc7CQ6UcWQXopkoq1UybLP5n6XqnXPoFnEdJ2
+  Explorer: https://explorer.solana.com/tx/5yTWqzsaqcxJbJyzHDVVetsvHrUvwJnpPCnw2mBi4JScN2orePeHc7CQ6UcWQXopkoq1UybLP5n6XqnXPoFnEdJ2?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/FJXuy3JaZuRxWAZSCVtVhNkykz7eVr4Fznz2ExkjaDDa?cluster=devnet
+  Word: XXneck
+--- Upload started for 54pH28J3xFgVUWhciMsQufEyj5x8tkMHGuHxo4bu11et (bu11et) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: 54pH28J3xFgVUWhciMsQufEyj5x8tkMHGuHxo4bu11et
+  Word: bu11et
+  NFT Mint: BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75
+  PDA: 4g3ZEfFQ8PmPriuw6fo1j3aohSDZsjX98rfMzeJXUGrT
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 639HFssHHDP6eg6w4sWpTa9SiCVZfsRpQDh3Nk3RJwYPo7TjurB4L7CCEs7NyNuKmwsfVTRgpGKaPjo3S1bwRMwM
+  TX Explorer: https://explorer.solana.com/tx/639HFssHHDP6eg6w4sWpTa9SiCVZfsRpQDh3Nk3RJwYPo7TjurB4L7CCEs7NyNuKmwsfVTRgpGKaPjo3S1bwRMwM?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75?cluster=devnet
+========================
+SUCCESS: Uploaded 54pH28J3xFgVUWhciMsQufEyj5x8tkMHGuHxo4bu11et
+  NFT Mint: BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75
+  PDA: 4g3ZEfFQ8PmPriuw6fo1j3aohSDZsjX98rfMzeJXUGrT
+  TX: 639HFssHHDP6eg6w4sWpTa9SiCVZfsRpQDh3Nk3RJwYPo7TjurB4L7CCEs7NyNuKmwsfVTRgpGKaPjo3S1bwRMwM
+  Explorer: https://explorer.solana.com/tx/639HFssHHDP6eg6w4sWpTa9SiCVZfsRpQDh3Nk3RJwYPo7TjurB4L7CCEs7NyNuKmwsfVTRgpGKaPjo3S1bwRMwM?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/BeDL9Vw5t9irYJxmZUiv8xTfHAMSyXitcwf4sRXuHR75?cluster=devnet
+  Word: bu11et
+--- Upload started for DxTAz9eQbrYhwyfcb6fgYgYjbF2ZefyCNLgbgCXXpart (XXpart) ---
+  Price setting: 0.1000 SOL
+  Wallet: SGgqBh3k...(87 chars)
+  Protocol: Split-key (oblivious mining)
+  Step 1/7: Importing modules...
+  Step 1/7: Imports OK
+  Step 2/7: Loading seller keypair...
+  Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 3/7: Deriving miner scalar from seed (split-key)...
+  Step 3/7: Miner scalar derived (full key never materializes)
+  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+    Sending miner scalar to TEE for combination with TEE scalar...
+    Full private key will ONLY exist inside TEE
+  Step 4/7: Split-key encryption SUCCEEDED
+    splitKey: True
+    encryptedInTEE: True
+    litActionHash: 1eb0cee61481286e...
+    ciphertext length: 140
+  Step 5/7: Minting NFT on devnet...
+    Seller: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+  Step 5/7: NFT minted OK: EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac
+    Mint cost: 0.001467 SOL (1466600 lamports)
+    Explorer: https://explorer.solana.com/address/EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac?cluster=devnet
+  Step 6/7: Building encrypted package JSON...
+    Price: 0.1000 SOL (100000000 lamports)
+  Step 6/7: Package built OK (1012 bytes, 15 fields)
+    Fields: ['vanityAddress', 'ciphertext', 'dataToEncryptHash', 'solRpcConditions', 'litActionHash', 'mintAddress', 'sellerAddress', 'encryptedInTEE', 'splitKey', 'iv', 'wrappedKey', 'wrapIv', 'litNetwork', 'vanityWord', 'priceLamports']
+  Step 7/7: Uploading encrypted package to Solana devnet PDA...
+    Sending transaction...
+  Step 7/7: Upload SUCCESS
+=== UPLOAD COMPLETE (Lit Encrypted) ===
+  Vanity Address: DxTAz9eQbrYhwyfcb6fgYgYjbF2ZefyCNLgbgCXXpart
+  Word: XXpart
+  NFT Mint: EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac
+  PDA: 7LdpaMuqwPR7uMirsZA1C3PxGNTxnhpLh33aKUHoAqoR
+  Price: 0.1000 SOL
+  Encrypted: YES (TEE)
+  TX Signature: 2ZHoBBwvqE8oCM4B3Bfu7homUhXWzqih6bREbouMW9nTJN4WvH2VVTwfcBCtzUsSLAycJ6KZkEuNasN4kghDrfTf
+  TX Explorer: https://explorer.solana.com/tx/2ZHoBBwvqE8oCM4B3Bfu7homUhXWzqih6bREbouMW9nTJN4WvH2VVTwfcBCtzUsSLAycJ6KZkEuNasN4kghDrfTf?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac?cluster=devnet
+========================
+SUCCESS: Uploaded DxTAz9eQbrYhwyfcb6fgYgYjbF2ZefyCNLgbgCXXpart
+  NFT Mint: EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac
+  PDA: 7LdpaMuqwPR7uMirsZA1C3PxGNTxnhpLh33aKUHoAqoR
+  TX: 2ZHoBBwvqE8oCM4B3Bfu7homUhXWzqih6bREbouMW9nTJN4WvH2VVTwfcBCtzUsSLAycJ6KZkEuNasN4kghDrfTf
+  Explorer: https://explorer.solana.com/tx/2ZHoBBwvqE8oCM4B3Bfu7homUhXWzqih6bREbouMW9nTJN4WvH2VVTwfcBCtzUsSLAycJ6KZkEuNasN4kghDrfTf?cluster=devnet
+  NFT Explorer: https://explorer.solana.com/address/EYjcrfT6nTfReWLCPxNYBs7sxZrkmbSRcNXYspVFZCac?cluster=devnet
+  Word: XXpart
