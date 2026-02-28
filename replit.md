@@ -17,9 +17,26 @@ Key technical implementations include:
 - GPU searcher (`core/searcher.py`) with an OpenCL kernel (`core/opencl/kernel.cl`) optimized for suffix matching.
 - Word processing (`core/words.py`) for loading word lists, including automatic 'l' to '1' substitutions for Base58 compatibility.
 - Solana client (`core/marketplace/solana_client.py`) for PDA derivation, transaction building, and on-chain package interaction, with data compaction for Solana transaction limits.
-- Lit Protocol encryption (`core/marketplace/lit_encrypt.py`) for secure key storage, relying on TEEs and HTTP calls.
+- Lit Protocol encryption (`core/marketplace/lit_encrypt.py`) for secure key storage, relying on TEEs and HTTP calls. No Node.js dependency — pure REST API to Chipotle V3.
 - SPL token operations (`core/marketplace/nft.py`) for NFT minting, transfer, and burning.
 - `bounties.json` for local storage and management of bounty requests.
+
+## Security: Hash-Pinned Code Verification
+The marketplace enforces code-signing hash verification to prevent tampered uploads:
+- The Lit Action encrypt template (`_ENCRYPT_TEMPLATE` in `lit_encrypt.py`) has a fixed SHA-256 hash computed by `get_lit_action_hash()`.
+- When a package is uploaded, the hash of the actual code executed in the TEE is stored in the package as `litActionHash`.
+- On the buyer side, `_enrich_packages()` in `backend.py` compares the stored `litActionHash` against the known trusted hash.
+- Three verification states: "TEE Verified" (hash matches), "Unknown Code" (TEE encrypted but hash mismatch), "Unverified" (not TEE encrypted).
+- `search_packages()` filters out non-verified packages — they never appear in marketplace browse results.
+- `buy_nft()` and `burn_and_decrypt()` in `backend.py` reject packages with mismatched hashes before any transaction.
+- Both web UI and desktop GUI block purchase/burn of unverified packages with clear error messages.
+- **Limitation**: This verifies the encryption code was unmodified, but cannot prevent a sophisticated attacker from extracting the key from process memory before encryption. True trustlessness would require key generation inside the TEE.
+
+## PyInstaller Build
+- `build.py` creates a standalone `solvanity.exe` (Windows) or `solvanity` (Linux) using PyInstaller `--onefile --windowed`.
+- `multiprocessing.freeze_support()` is called at the top of `if __name__ == "__main__"` before `main()` to ensure spawned GPU worker processes work correctly in frozen executables.
+- Error logging redirects stderr/stdout to `solvanity_error.log` next to the exe for debugging `--windowed` builds.
+- BrokenPipeError in mining workers is handled via `_send()` wrapper in `core/word_miner.py`.
 
 ## External Dependencies
 - **Flask**: Web application framework.

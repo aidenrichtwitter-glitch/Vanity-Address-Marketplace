@@ -1788,6 +1788,17 @@ class MainWindow(QMainWindow):
         if not pkg:
             return
 
+        verified = pkg.get("verified", "Unverified")
+        if verified != "TEE Verified":
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Unverified Package",
+                "This package was not encrypted by verified code.\n"
+                "Purchase blocked for your safety.\n\n"
+                f"Status: {verified}"
+            )
+            return
+
         encrypted_json = pkg.get("encrypted_json")
         if not encrypted_json:
             self.decrypt_status_label.setText("No encrypted data in this package")
@@ -1851,6 +1862,17 @@ class MainWindow(QMainWindow):
     def _burn_nft(self):
         pkg = self._get_selected_pkg()
         if not pkg:
+            return
+
+        verified = pkg.get("verified", "Unverified")
+        if verified != "TEE Verified":
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self, "Unverified Package",
+                "This package was not encrypted by verified code.\n"
+                "Burn blocked for your safety.\n\n"
+                f"Status: {verified}"
+            )
             return
 
         encrypted_json = pkg.get("encrypted_json")
@@ -2595,8 +2617,18 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
+def _setup_error_log():
+    if getattr(sys, 'frozen', False):
+        log_path = os.path.join(os.path.dirname(sys.executable), "solvanity_error.log")
+        try:
+            fh = open(log_path, "a", encoding="utf-8")
+            sys.stderr = fh
+            sys.stdout = fh
+        except Exception:
+            pass
+
+
 def main():
-    multiprocessing.freeze_support()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     app.setStyleSheet(STYLESHEET)
@@ -2606,4 +2638,6 @@ def main():
 
 
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    _setup_error_log()
     main()

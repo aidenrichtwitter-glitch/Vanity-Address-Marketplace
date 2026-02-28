@@ -18,6 +18,31 @@ log = logging.getLogger("backend")
 
 BOUNTIES_FILE = Path("bounties.json")
 
+_trusted_lit_hash_cache = None
+
+
+def _get_trusted_lit_hash():
+    global _trusted_lit_hash_cache
+    if _trusted_lit_hash_cache is None:
+        try:
+            from core.marketplace.lit_encrypt import get_lit_action_hash
+            _trusted_lit_hash_cache = get_lit_action_hash()
+        except Exception:
+            _trusted_lit_hash_cache = ""
+    return _trusted_lit_hash_cache
+
+
+def _verify_package_hash(encrypted_json):
+    stored_hash = encrypted_json.get("litActionHash", "")
+    trusted = _get_trusted_lit_hash()
+    if not trusted:
+        return False, "Could not compute trusted code hash"
+    if not stored_hash:
+        return False, "Package missing code hash — cannot verify integrity"
+    if stored_hash != trusted:
+        return False, "Package was encrypted by unverified code. Purchase blocked for your safety."
+    return True, ""
+
 
 def load_bounties():
     if BOUNTIES_FILE.exists():
@@ -103,7 +128,14 @@ def _enrich_packages(packages):
         enc_json = pkg.get("encrypted_json", {})
 
         tee_flag = enc_json.get("encryptedInTEE", False)
-        pkg["verified"] = "TEE Verified" if tee_flag else "Unverified"
+        if tee_flag:
+            stored_hash = enc_json.get("litActionHash", "")
+            if stored_hash and stored_hash == _get_trusted_lit_hash():
+                pkg["verified"] = "TEE Verified"
+            else:
+                pkg["verified"] = "Unknown Code"
+        else:
+            pkg["verified"] = "Unverified"
 
         price_lamports = enc_json.get("priceLamports", 0)
         if price_lamports and int(price_lamports) > 0:
@@ -196,6 +228,11 @@ def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
     if not mint_address:
         return None, "No NFT mint address"
 
+    verified, verify_err = _verify_package_hash(encrypted_json)
+    if not verified:
+        log_fn(f"  BLOCKED: {verify_err}")
+        return None, verify_err
+
     try:
         from core.marketplace.solana_client import load_seller_keypair, transfer_sol
         from core.marketplace.nft import check_nft_supply, check_token_balance, transfer_nft
@@ -282,6 +319,11 @@ def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
         return None, "No encrypted data"
     if not mint_address:
         return None, "No NFT mint address"
+
+    verified, verify_err = _verify_package_hash(encrypted_json)
+    if not verified:
+        log_fn(f"  BLOCKED: {verify_err}")
+        return None, verify_err
 
     try:
         from core.marketplace.solana_client import load_seller_keypair

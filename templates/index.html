@@ -857,6 +857,15 @@ function buyNft() {
     const pkg = _getSelectedPkg();
     if (!pkg) return;
     const decryptStatus = document.getElementById('decryptStatus');
+
+    const verified = pkg.verified || 'Unverified';
+    if (verified !== 'TEE Verified') {
+        decryptStatus.textContent = 'BLOCKED: Package not encrypted by verified code (' + verified + ')';
+        decryptStatus.style.color = '#ff5050';
+        appendLog('mpLog', 'Purchase blocked: unverified package (' + verified + ')');
+        return;
+    }
+
     const buyerKey = _getBuyerKey(decryptStatus);
     if (!buyerKey) return;
 
@@ -907,6 +916,15 @@ function burnNft() {
     const pkg = _getSelectedPkg();
     if (!pkg) return;
     const decryptStatus = document.getElementById('decryptStatus');
+
+    const verified = pkg.verified || 'Unverified';
+    if (verified !== 'TEE Verified') {
+        decryptStatus.textContent = 'BLOCKED: Package not encrypted by verified code (' + verified + ')';
+        decryptStatus.style.color = '#ff5050';
+        appendLog('mpLog', 'Burn blocked: unverified package (' + verified + ')');
+        return;
+    }
+
     const buyerKey = _getBuyerKey(decryptStatus);
     if (!buyerKey) return;
 
