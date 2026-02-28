@@ -143,8 +143,8 @@ _SPLIT_KEY_ENCRYPT_TEMPLATE = """
     if (kScalar === 0n) throw new Error("Combined scalar is zero");
     const kBytes = scalarToBytes(kScalar, 32);
 
-    const P = scalarMultBase(kScalar);
-    const pubBytes = encPt(P);
+    const pubPoint = scalarMultBase(kScalar);
+    const pubBytes = encPt(pubPoint);
 
     const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
     function b58enc(buf) {{
