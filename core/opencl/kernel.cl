@@ -3632,6 +3632,196 @@ void sha512(const unsigned char *message, unsigned char *out) {
   COPY_REVERSED_ENDIAN_U64(out,S,7)
 }
 
+typedef struct {
+  fe YplusX;
+  fe YminusX;
+  fe Z;
+  fe T2d;
+} ge_cached;
+
+inline __attribute__((always_inline))
+uint64_t load_3_bytes(const unsigned char *in) {
+  uint64_t result;
+  result = (uint64_t)in[0];
+  result |= ((uint64_t)in[1]) << 8;
+  result |= ((uint64_t)in[2]) << 16;
+  return result;
+}
+
+inline __attribute__((always_inline))
+uint64_t load_4_bytes(const unsigned char *in) {
+  uint64_t result;
+  result = (uint64_t)in[0];
+  result |= ((uint64_t)in[1]) << 8;
+  result |= ((uint64_t)in[2]) << 16;
+  result |= ((uint64_t)in[3]) << 24;
+  return result;
+}
+
+inline __attribute__((always_inline))
+void fe_frombytes(ADDR_GENERIC fe h, const unsigned char *s) {
+  int64_t h0 = (int64_t)load_4_bytes(s);
+  int64_t h1 = (int64_t)load_3_bytes(s + 4) << 6;
+  int64_t h2 = (int64_t)load_3_bytes(s + 7) << 5;
+  int64_t h3 = (int64_t)load_3_bytes(s + 10) << 3;
+  int64_t h4 = (int64_t)load_3_bytes(s + 13) << 2;
+  int64_t h5 = (int64_t)load_4_bytes(s + 16);
+  int64_t h6 = (int64_t)load_3_bytes(s + 20) << 7;
+  int64_t h7 = (int64_t)load_3_bytes(s + 23) << 5;
+  int64_t h8 = (int64_t)load_3_bytes(s + 26) << 4;
+  int64_t h9 = (int64_t)((load_3_bytes(s + 29) & 8388607) << 2);
+
+  int64_t carry0, carry1, carry2, carry3, carry4;
+  int64_t carry5, carry6, carry7, carry8, carry9;
+
+  carry9 = (h9 + ((int64_t)1 << 24)) >> 25; h0 += carry9 * 19; h9 -= carry9 << 25;
+  carry1 = (h1 + ((int64_t)1 << 24)) >> 25; h2 += carry1; h1 -= carry1 << 25;
+  carry3 = (h3 + ((int64_t)1 << 24)) >> 25; h4 += carry3; h3 -= carry3 << 25;
+  carry5 = (h5 + ((int64_t)1 << 24)) >> 25; h6 += carry5; h5 -= carry5 << 25;
+  carry7 = (h7 + ((int64_t)1 << 24)) >> 25; h8 += carry7; h7 -= carry7 << 25;
+
+  carry0 = (h0 + ((int64_t)1 << 25)) >> 26; h1 += carry0; h0 -= carry0 << 26;
+  carry2 = (h2 + ((int64_t)1 << 25)) >> 26; h3 += carry2; h2 -= carry2 << 26;
+  carry4 = (h4 + ((int64_t)1 << 25)) >> 26; h5 += carry4; h4 -= carry4 << 26;
+  carry6 = (h6 + ((int64_t)1 << 25)) >> 26; h7 += carry6; h6 -= carry6 << 26;
+  carry8 = (h8 + ((int64_t)1 << 25)) >> 26; h9 += carry8; h8 -= carry8 << 26;
+
+  h[0] = (int32_t)h0;
+  h[1] = (int32_t)h1;
+  h[2] = (int32_t)h2;
+  h[3] = (int32_t)h3;
+  h[4] = (int32_t)h4;
+  h[5] = (int32_t)h5;
+  h[6] = (int32_t)h6;
+  h[7] = (int32_t)h7;
+  h[8] = (int32_t)h8;
+  h[9] = (int32_t)h9;
+}
+
+inline __attribute__((always_inline))
+int fe_isnonzero(const ADDR_GENERIC fe f) {
+  unsigned char s[32];
+  fe_tobytes(s, f);
+  unsigned int r = 0;
+  for (int i = 0; i < 32; i++) r |= s[i];
+  return r != 0;
+}
+
+inline __attribute__((always_inline))
+void fe_pow22523(ADDR_GENERIC fe out, const ADDR_GENERIC fe z) {
+  fe t0, t1, t2;
+  int i;
+
+  fe_sq(t0, z);
+  fe_sq(t1, t0);
+  fe_sq(t1, t1);
+  fe_mul(t1, z, t1);
+  fe_mul(t0, t0, t1);
+  fe_sq(t0, t0);
+  fe_mul(t0, t1, t0);
+  fe_sq(t1, t0);
+  for (i = 0; i < 4; ++i) fe_sq(t1, t1);
+  fe_mul(t0, t1, t0);
+  fe_sq(t1, t0);
+  for (i = 0; i < 9; ++i) fe_sq(t1, t1);
+  fe_mul(t1, t1, t0);
+  fe_sq(t2, t1);
+  for (i = 0; i < 19; ++i) fe_sq(t2, t2);
+  fe_mul(t1, t2, t1);
+  fe_sq(t1, t1);
+  for (i = 0; i < 9; ++i) fe_sq(t1, t1);
+  fe_mul(t0, t1, t0);
+  fe_sq(t1, t0);
+  for (i = 0; i < 49; ++i) fe_sq(t1, t1);
+  fe_mul(t1, t1, t0);
+  fe_sq(t2, t1);
+  for (i = 0; i < 99; ++i) fe_sq(t2, t2);
+  fe_mul(t1, t2, t1);
+  fe_sq(t1, t1);
+  for (i = 0; i < 49; ++i) fe_sq(t1, t1);
+  fe_mul(t0, t1, t0);
+  fe_sq(t0, t0);
+  fe_sq(t0, t0);
+  fe_mul(out, t0, z);
+}
+
+inline __attribute__((always_inline))
+int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
+  fe d_val = {-10913610,13819322,18285313,-27395766,26581164,
+              6729176,-26908512,12299308,-13831728,21078490};
+  fe sqrtm1_val = {-32595792,-7943725,9377950,3500415,12389472,
+                   -272473,-25146209,-2005654,326686,11406482};
+  fe u, v, v3, vxx, check;
+
+  fe_frombytes(h->Y, s);
+  fe_1(h->Z);
+  fe_sq(u, h->Y);
+  fe_mul(v, u, d_val);
+  fe_sub(u, u, h->Z);
+  fe_add(v, v, h->Z);
+
+  fe_sq(v3, v);
+  fe_mul(v3, v3, v);
+  fe_sq(h->X, v3);
+  fe_mul(h->X, h->X, v);
+  fe_mul(h->X, h->X, u);
+
+  fe_pow22523(h->X, h->X);
+  fe_mul(h->X, h->X, v3);
+  fe_mul(h->X, h->X, u);
+
+  fe_sq(vxx, h->X);
+  fe_mul(vxx, vxx, v);
+  fe_sub(check, vxx, u);
+  if (fe_isnonzero(check)) {
+    fe_add(check, vxx, u);
+    if (fe_isnonzero(check)) return -1;
+    fe_mul(h->X, h->X, sqrtm1_val);
+  }
+
+  if (fe_isnegative(h->X) != (s[31] >> 7)) {
+    fe_neg(h->X, h->X);
+  }
+
+  fe_mul(h->T, h->X, h->Y);
+  return 0;
+}
+
+inline __attribute__((always_inline))
+void ge_p3_to_cached(ge_cached *r, const ge_p3 *p) {
+  fe d2_val = {-21827239,-5839606,30745221,13898782,229458,
+               15978800,-12551817,-6495438,29715968,9444199};
+  fe_add(r->YplusX, p->Y, p->X);
+  fe_sub(r->YminusX, p->Y, p->X);
+  fe_copy(r->Z, p->Z);
+  fe_mul(r->T2d, p->T, d2_val);
+}
+
+inline __attribute__((always_inline))
+void ge_add_cached(ge_p1p1 *r, const ge_p3 *p, const ge_cached *q) {
+  fe t0;
+  fe_add(r->X, p->Y, p->X);
+  fe_sub(r->Y, p->Y, p->X);
+  fe_mul(r->Z, r->X, q->YplusX);
+  fe_mul(r->Y, r->Y, q->YminusX);
+  fe_mul(r->T, q->T2d, p->T);
+  fe_mul(r->X, p->Z, q->Z);
+  fe_add(t0, r->X, r->X);
+  fe_sub(r->X, r->Z, r->Y);
+  fe_add(r->Y, r->Z, r->Y);
+  fe_add(r->Z, t0, r->T);
+  fe_sub(r->T, t0, r->T);
+}
+
+inline __attribute__((always_inline))
+void ge_p3_add(ge_p3 *r, const ge_p3 *p, const ge_p3 *q) {
+  ge_cached q_cached;
+  ge_p1p1 r_p1p1;
+  ge_p3_to_cached(&q_cached, q);
+  ge_add_cached(&r_p1p1, p, &q_cached);
+  ge_p1p1_to_p3(r, &r_p1p1);
+}
+
 inline __attribute__((always_inline))
 void ed25519_create_keypair(unsigned char *public_key,
                             unsigned char *private_key,
@@ -3746,12 +3936,17 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
                               __global const uchar * __restrict suffixes,
                               uint suffix_count,
                               uint suffix_width,
-                              __global const uchar * __restrict suffix_lengths) {
+                              __global const uchar * __restrict suffix_lengths,
+                              constant uchar *tee_point) {
 #if SUFFIX_BYTES > 0
   __local uchar local_suffixes[SUFFIX_BYTES];
   __local uchar local_suffix_lengths[SUFFIX_BYTES / 6 + 1];
+#endif
+  __local int32_t tee_decoded_raw[40];
+  __local int tee_active;
   {
     uint lid = get_local_id(0);
+#if SUFFIX_BYTES > 0
     uint lsz = get_local_size(0);
     for (uint i = lid; i < SUFFIX_BYTES; i += lsz) {
       local_suffixes[i] = suffixes[i];
@@ -3759,9 +3954,22 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
     for (uint i = lid; i < suffix_count; i += lsz) {
       local_suffix_lengths[i] = suffix_lengths[i];
     }
+#endif
+    if (lid == 0) {
+      int nonzero = 0;
+      for (int i = 0; i < 32; i++) nonzero |= tee_point[i];
+      tee_active = nonzero ? 1 : 0;
+      if (tee_active) {
+        ge_p3 tmp;
+        ge_frombytes_vartime(&tmp, tee_point);
+        for (int i = 0; i < 10; i++) tee_decoded_raw[i] = tmp.X[i];
+        for (int i = 0; i < 10; i++) tee_decoded_raw[10+i] = tmp.Y[i];
+        for (int i = 0; i < 10; i++) tee_decoded_raw[20+i] = tmp.Z[i];
+        for (int i = 0; i < 10; i++) tee_decoded_raw[30+i] = tmp.T[i];
+      }
+    }
     barrier(CLK_LOCAL_MEM_FENCE);
   }
-#endif
 
   uchar public_key[32] __attribute__((aligned(4)));
   uchar private_key[64];
@@ -3777,7 +3985,25 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
     key_base[31 - i] += ((global_id >> (i * 8)) & 0xFF);
   }
 
-  ed25519_create_keypair(public_key, private_key, key_base);
+  ge_p3 A;
+  sha512(key_base, private_key);
+  private_key[0] &= 248;
+  private_key[31] &= 63;
+  private_key[31] |= 64;
+  ge_scalarmult_base(&A, private_key);
+
+  if (tee_active) {
+    ge_p3 tee_pt;
+    for (int i = 0; i < 10; i++) tee_pt.X[i] = tee_decoded_raw[i];
+    for (int i = 0; i < 10; i++) tee_pt.Y[i] = tee_decoded_raw[10+i];
+    for (int i = 0; i < 10; i++) tee_pt.Z[i] = tee_decoded_raw[20+i];
+    for (int i = 0; i < 10; i++) tee_pt.T[i] = tee_decoded_raw[30+i];
+    ge_p3 combined;
+    ge_p3_add(&combined, &A, &tee_pt);
+    ge_p3_tobytes(public_key, &combined);
+  } else {
+    ge_p3_tobytes(public_key, &A);
+  }
   size_t length;
   uchar addr_buffer[45] __attribute__((aligned(4)));
   uchar *addr_raw = base58_encode(public_key, &length, addr_buffer);

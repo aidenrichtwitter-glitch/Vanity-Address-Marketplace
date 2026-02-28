@@ -248,7 +248,7 @@ class ThreadBridgeSignals(QObject):
 class MiningThread(threading.Thread):
     def __init__(self, signals, word_filter, suffix_patterns, output_dir,
                  count, iteration_bits, power_pct=100, max_temp=80,
-                 mining_mode="mine"):
+                 mining_mode="mine", tee_point=None):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
@@ -259,6 +259,7 @@ class MiningThread(threading.Thread):
         self.power_pct = power_pct
         self.max_temp = max_temp
         self.mining_mode = mining_mode
+        self.tee_point = tee_point
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -310,14 +311,19 @@ class MiningThread(threading.Thread):
             workers = []
             for idx in range(gpu_counts):
                 p_conn, c_conn = mp_ctx.Pipe()
+                worker_kwargs = {
+                    "suffix_buffer": suffix_buffer,
+                    "suffix_count": suffix_count,
+                    "suffix_width": suffix_width,
+                    "suffix_lengths": suffix_lengths,
+                }
+                if self.tee_point:
+                    worker_kwargs["tee_point"] = self.tee_point
                 proc = mp_ctx.Process(
                     target=_persistent_worker,
                     args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn,
                           self.power_pct, self.max_temp),
-                    kwargs={"suffix_buffer": suffix_buffer,
-                            "suffix_count": suffix_count,
-                            "suffix_width": suffix_width,
-                            "suffix_lengths": suffix_lengths},
+                    kwargs=worker_kwargs,
                     daemon=True,
                 )
                 proc.start()
@@ -396,13 +402,15 @@ class MiningThread(threading.Thread):
 
 
 class CpuMiningThread(threading.Thread):
-    def __init__(self, signals, word_filter, output_dir, count=0, mining_mode="mine"):
+    def __init__(self, signals, word_filter, output_dir, count=0, mining_mode="mine",
+                 tee_point=None):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
         self.output_dir = output_dir
         self.count = count
         self.mining_mode = mining_mode
+        self.tee_point = tee_point
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -411,10 +419,20 @@ class CpuMiningThread(threading.Thread):
     def run(self):
         try:
             import secrets
+            import hashlib as _hl
             from nacl.signing import SigningKey
             from base58 import b58encode
 
-            self.signals.log.emit("CPU mining mode — no GPU required")
+            use_split_key = self.tee_point is not None and len(self.tee_point) == 32 and any(b != 0 for b in self.tee_point)
+
+            if use_split_key:
+                from nacl.bindings import (
+                    crypto_scalarmult_ed25519_base_noclamp,
+                    crypto_core_ed25519_add,
+                )
+                self.signals.log.emit("CPU mining mode (split-key) — no GPU required")
+            else:
+                self.signals.log.emit("CPU mining mode — no GPU required")
             self.signals.status.emit("Mining (CPU)...")
 
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
@@ -429,15 +447,27 @@ class CpuMiningThread(threading.Thread):
                     break
 
                 seed = secrets.token_bytes(32)
-                sk = SigningKey(seed)
-                pk_bytes = bytes(sk.verify_key)
-                pubkey = b58encode(pk_bytes).decode()
+
+                if use_split_key:
+                    h = _hl.sha512(seed).digest()
+                    scalar = bytearray(h[:32])
+                    scalar[0] &= 248
+                    scalar[31] &= 63
+                    scalar[31] |= 64
+                    miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
+                    combined_point = crypto_core_ed25519_add(miner_point, self.tee_point)
+                    pubkey = b58encode(combined_point).decode()
+                else:
+                    sk = SigningKey(seed)
+                    pk_bytes = bytes(sk.verify_key)
+                    pubkey = b58encode(pk_bytes).decode()
+
                 keys_checked += 1
 
                 word, padding = self.word_filter.check_address(pubkey)
 
                 if word:
-                    pv_bytes = bytes(sk)
+                    pv_bytes = seed
                     suffix_display = (padding + word) if padding else word
                     if self.mining_mode != "blind":
                         save_keypair(pv_bytes, self.output_dir, word=word, pubkey=pubkey)
@@ -2218,6 +2248,7 @@ class MainWindow(QMainWindow):
             pv_bytes, pubkey, wallet, vanity_word=vanity_word,
             price_sol=price_sol, log_fn=_log, mp_fn=_mp,
             on_success=_on_success, on_error=_on_error,
+            session_blob=getattr(self, '_session_blob', None),
         )
 
     def _on_upload_success(self, result, pubkey):
@@ -2388,6 +2419,22 @@ class MainWindow(QMainWindow):
         self._last_speed_raw = 0.0
         self._suffix_pattern_count = len(suffix_patterns)
 
+        tee_point = None
+        self._session_blob = None
+        if self._mining_mode == "blind":
+            try:
+                from core.marketplace.lit_encrypt import split_key_setup
+                self._on_log("[Blind] Setting up split-key protocol with TEE...")
+                self.status_label.setText("Split-key setup...")
+                session_result = split_key_setup()
+                tee_point = session_result["teePoint"]
+                self._session_blob = session_result
+                self._on_log(f"[Blind] Split-key setup complete (session: {session_result['sessionId'][:8]}...)")
+                self._on_log("[Blind] Mining with split-key: full private key will NEVER exist on this machine")
+            except Exception as e:
+                self._on_log(f"[Blind] Split-key setup failed: {e}")
+                self._on_log("[Blind] Falling back to direct encryption mode")
+
         count_limit = 0
         if self._mining_mode == "blind":
             count_limit = len(word_filter.words)
@@ -2404,6 +2451,7 @@ class MainWindow(QMainWindow):
                 power_pct=power_pct,
                 max_temp=max_temp,
                 mining_mode=self._mining_mode,
+                tee_point=tee_point,
             )
         else:
             self.mining_thread = CpuMiningThread(
@@ -2412,6 +2460,7 @@ class MainWindow(QMainWindow):
                 output_dir=output_dir,
                 count=count_limit,
                 mining_mode=self._mining_mode,
+                tee_point=tee_point,
             )
 
         self._blind_wallet_snapshot = self.seller_wallet_edit.text().strip() if self._mining_mode == "blind" else ""

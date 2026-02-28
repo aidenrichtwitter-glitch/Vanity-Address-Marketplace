@@ -1,7 +1,7 @@
 # SolVanity Word Miner
 
 ## Overview
-SolVanity Word Miner is a GPU-accelerated application for generating Solana vanity addresses. It allows users to mine addresses that end with dictionary words, including support for "X" padding and character substitutions (e.g., 'l' to '1'). The project features both a web-based UI (Flask) and a desktop GUI (PySide6/Qt). A key innovation is its integrated blind vanity key marketplace, leveraging NFT-based burn-to-decrypt mechanics. Mined keys are encrypted using Lit Protocol, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers can acquire these NFTs and then burn them to decrypt and retrieve the private key locally, facilitating a secure and decentralized marketplace for vanity addresses.
+SolVanity Word Miner is a GPU-accelerated application for generating Solana vanity addresses. It allows users to mine addresses that end with dictionary words, including support for "X" padding and character substitutions (e.g., 'l' to '1'). The project features both a web-based UI (Flask) and a desktop GUI (PySide6/Qt). A key innovation is its integrated blind vanity key marketplace, leveraging NFT-based burn-to-decrypt mechanics with a **split-key Ed25519 protocol** for trustless blind mining. Mined keys are encrypted using Lit Protocol's Chipotle V3 TEE REST API, paired with an on-chain NFT, and uploaded to Solana devnet PDAs. Buyers can acquire these NFTs and then burn them to decrypt and retrieve the private key locally.
 
 ## User Preferences
 When making changes, ensure that new features or modifications are implemented identically across both the web application (Flask) and the desktop GUI (PySide6). All marketplace features, including table columns, filtering logic, buyer wallet interactions, and available actions (Buy, Burn & Decrypt, Relist), must maintain a 1:1 parity between the two frontends. Avoid implementing features in one frontend without a corresponding implementation in the other.
@@ -21,16 +21,47 @@ Key technical implementations include:
 - SPL token operations (`core/marketplace/nft.py`) for NFT minting, transfer, and burning.
 - `bounties.json` for local storage and management of bounty requests.
 
+## Split-Key Ed25519 Protocol (Trustless Blind Mining)
+The marketplace uses a split-key protocol where neither the miner nor the TEE ever holds the complete private key alone:
+
+### Protocol Flow
+1. **Setup** (`split_key_setup()` in `lit_encrypt.py`): TEE generates random scalar `t`, computes `T = t*B`, wraps `t` with AES-GCM using HMAC-derived key. Returns `T` (32-byte compressed point) and wrapped scalar blob.
+2. **Mining**: GPU kernel receives `T` as kernel argument 8. For each candidate seed, computes miner scalar `s` (SHA-512 + clamping), then `P = s*B + T` (point addition). Checks if Base58(P) ends in a dictionary word.
+3. **On match**: Miner's seed is returned. The upload handler derives the clamped scalar `s` from the seed via `SHA-512(seed)[0:32]` with Ed25519 clamping (bits 0,1,2 cleared, bit 254 set, bit 255 cleared).
+4. **Combine** (`split_key_encrypt()` in `lit_encrypt.py`): Miner sends scalar `s` to TEE. TEE unwraps `t`, computes `k = s + t mod L`, verifies `k*B` matches the vanity address, encrypts the full private key `k` with AES-GCM. Returns encrypted package.
+5. **Neither party** ever has the complete key alone. The miner only has `s`, the TEE only has `t` until step 4, and in step 4 the full key only exists inside the TEE enclave.
+
+### Implementation Details
+- **OpenCL kernel** (`kernel.cl`): Added `ge_frombytes_vartime` (decode compressed point), `ge_p3_add` (extended point addition), `ge_p3_to_cached` + `ge_add_cached` helpers. When `tee_point` is non-zero, the kernel decodes it once per workgroup (lid==0 + barrier), then each thread adds it to their miner point.
+- **Searcher** (`searcher.py`): Accepts `tee_point: bytes` parameter, creates OpenCL buffer, passes as kernel arg 8. All-zeros = normal mode.
+- **Worker pipeline** (`word_miner.py`): `_persistent_worker` and `gpu_word_search` accept and forward `tee_point`.
+- **CPU mining** (`gui.py`, `web_app.py`): Uses `nacl.bindings.crypto_scalarmult_ed25519_base_noclamp` + `crypto_core_ed25519_add` for split-key point addition.
+- **Lit Actions** (`lit_encrypt.py`): Inline Ed25519 BigInt implementation in JavaScript (no external dependencies). `_SPLIT_KEY_SETUP_TEMPLATE` generates TEE scalar, `_SPLIT_KEY_ENCRYPT_TEMPLATE` combines and encrypts.
+- **Backend** (`backend.py`): `blind_upload()` accepts optional `session_blob` parameter. When present, derives miner scalar from seed and calls `split_key_encrypt()` instead of `encrypt_private_key()`. Package JSON includes `splitKey: true` field.
+- **Graceful fallback**: If split-key setup fails (TEE unavailable), both GUI and web app fall back to direct encryption mode.
+
+### Session Blob Format
+```json
+{
+  "teePoint": "<32 bytes>",
+  "wrappedScalar": "<base64 AES-GCM ciphertext>",
+  "wrapIv": "<base64 12-byte IV>",
+  "sessionId": "<hex 16-byte random>",
+  "setupCodeHash": "<SHA-256 hex>"
+}
+```
+Wrapping key: `HMAC-SHA256(api_key, "split-key-{session_id}")`
+
 ## Security: Hash-Pinned Code Verification
 The marketplace enforces code-signing hash verification to prevent tampered uploads:
-- The Lit Action encrypt template (`_ENCRYPT_TEMPLATE` in `lit_encrypt.py`) has a fixed SHA-256 hash computed by `get_lit_action_hash()`.
+- The Lit Action templates (`_ENCRYPT_TEMPLATE`, `_SPLIT_KEY_SETUP_TEMPLATE`, `_SPLIT_KEY_ENCRYPT_TEMPLATE` in `lit_encrypt.py`) have a combined SHA-256 hash computed by `get_lit_action_hash()`.
 - When a package is uploaded, the hash of the actual code executed in the TEE is stored in the package as `litActionHash`.
 - On the buyer side, `_enrich_packages()` in `backend.py` compares the stored `litActionHash` against the known trusted hash.
 - Three verification states: "TEE Verified" (hash matches), "Unknown Code" (TEE encrypted but hash mismatch), "Unverified" (not TEE encrypted).
 - `search_packages()` filters out non-verified packages — they never appear in marketplace browse results.
 - `buy_nft()` and `burn_and_decrypt()` in `backend.py` reject packages with mismatched hashes before any transaction.
 - Both web UI and desktop GUI block purchase/burn of unverified packages with clear error messages.
-- **Limitation**: This verifies the encryption code was unmodified, but cannot prevent a sophisticated attacker from extracting the key from process memory before encryption. True trustlessness would require key generation inside the TEE.
+- Split-key packages provide stronger security than direct encryption: the miner never sees the full private key, eliminating the process-memory extraction attack vector.
 
 ## PyInstaller Build
 - `build.py` creates a standalone `solvanity.exe` (Windows) or `solvanity` (Linux) using PyInstaller `--onefile --windowed`.
@@ -42,11 +73,11 @@ The marketplace enforces code-signing hash verification to prevent tampered uplo
 - **Flask**: Web application framework.
 - **PySide6**: Desktop GUI framework.
 - **pyopencl**: GPU acceleration for OpenCL-compatible devices.
-- **pynacl**: Cryptographic operations, specifically Ed25519 key generation.
+- **pynacl**: Cryptographic operations, specifically Ed25519 key generation and low-level scalar/point operations for split-key protocol.
 - **base58**: Base58 encoding and decoding.
 - **requests**: HTTP client for interacting with the Lit Protocol API and Solana RPC.
 - **solders**: Solana primitive types (keypair, pubkey, instruction).
 - **solana**: Solana RPC client library for blockchain interactions.
 - **pynvml**: NVIDIA GPU monitoring (temperature, usage).
-- **Lit Protocol (Chipotle V3 REST API)**: For TEE-based encryption and decryption of private keys.
+- **Lit Protocol (Chipotle V3 REST API)**: For TEE-based encryption, decryption, and split-key scalar operations. No Node.js dependency.
 - **Solana Blockchain (Devnet)**: On-chain storage of encrypted packages in PDAs and NFT management via SPL Token Program.

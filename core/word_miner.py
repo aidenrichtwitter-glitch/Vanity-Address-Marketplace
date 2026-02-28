@@ -36,7 +36,7 @@ _worker_searcher = None
 
 def _worker_init(kernel_source, iteration_bits, index, chosen_devices,
                  suffix_buffer=None, suffix_count=0, suffix_width=0,
-                 suffix_lengths=None):
+                 suffix_lengths=None, tee_point=None):
     global _worker_searcher
     setting = HostSetting(kernel_source, iteration_bits)
     _worker_searcher = Searcher(
@@ -48,6 +48,7 @@ def _worker_init(kernel_source, iteration_bits, index, chosen_devices,
         suffix_count=suffix_count,
         suffix_width=suffix_width,
         suffix_lengths=suffix_lengths,
+        tee_point=tee_point,
     )
 
 
@@ -81,7 +82,7 @@ def _worker_search(gpu_counts, stop_flag, lock):
 def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_devices, conn,
                        power_pct=100, max_temp=80,
                        suffix_buffer=None, suffix_count=0, suffix_width=0,
-                       suffix_lengths=None):
+                       suffix_lengths=None, tee_point=None):
     try:
         from core.utils.gpu_temp import get_gpu_temp as _get_temp
 
@@ -95,6 +96,7 @@ def _persistent_worker(index, kernel_source, iteration_bits, gpu_counts, chosen_
             suffix_count=suffix_count,
             suffix_width=suffix_width,
             suffix_lengths=suffix_lengths,
+            tee_point=tee_point,
         )
         conn.send({"type": "ready"})
 
@@ -208,6 +210,7 @@ def gpu_word_search(
     suffix_count=0,
     suffix_width=0,
     suffix_lengths=None,
+    tee_point=None,
 ):
     try:
         setting = HostSetting(kernel_source, iteration_bits)
@@ -220,6 +223,7 @@ def gpu_word_search(
             suffix_count=suffix_count,
             suffix_width=suffix_width,
             suffix_lengths=suffix_lengths,
+            tee_point=tee_point,
         )
         i = 0
         st = time.time()

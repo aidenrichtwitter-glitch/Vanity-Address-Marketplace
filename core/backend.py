@@ -468,7 +468,8 @@ def relist_nft(owner_key, mint_address, vanity_address, new_price_sol=0,
 
 
 def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
-                 log_fn=None, mp_fn=None, on_success=None, on_error=None):
+                 log_fn=None, mp_fn=None, on_success=None, on_error=None,
+                 session_blob=None):
     if log_fn is None:
         log_fn = lambda msg: log.info(f"[Blind] {msg}")
     if mp_fn is None:
@@ -476,20 +477,24 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
 
     word_label = f" ({vanity_word})" if vanity_word else ""
     price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
+    is_split_key = session_blob is not None
 
     log_fn(f"=== BLIND UPLOAD START for {pubkey[:16]}...{word_label} ===")
     mp_fn(f"--- Upload started for {pubkey}{word_label} ---")
     mp_fn(f"  Price setting: {price_display}")
     mp_fn(f"  Wallet: {wallet[:8]}...({len(wallet)} chars)")
+    if is_split_key:
+        mp_fn(f"  Protocol: Split-key (oblivious mining)")
 
     def _upload():
         try:
             mp_fn("  Step 1/7: Importing modules...")
             import base58 as b58_mod
+            import hashlib as _hashlib
             from nacl.signing import SigningKey
             from core.marketplace.solana_client import load_seller_keypair, upload_package
             from core.marketplace.nft import mint_nft
-            from core.marketplace.lit_encrypt import encrypt_private_key
+            from core.marketplace.lit_encrypt import encrypt_private_key, split_key_encrypt
             from solders.pubkey import Pubkey
             mp_fn("  Step 1/7: Imports OK")
         except Exception as e:
@@ -514,38 +519,76 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 on_error(str(e), pubkey)
             return
 
-        try:
-            mp_fn("  Step 3/7: Encoding private key...")
-            sk = SigningKey(pv_bytes)
-            pb_bytes = bytes(sk.verify_key)
-            privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
-            mp_fn(f"  Step 3/7: Private key encoded ({len(privkey_b58)} chars)")
-        except Exception as e:
-            log_fn(f"KEY ENCODING FAILED: {e}")
-            mp_fn(f"  FATAL: Failed to encode private key: {e}")
-            mp_fn(f"  Traceback: {_tb.format_exc()}")
-            if on_error:
-                on_error(str(e), pubkey)
-            return
+        if is_split_key:
+            try:
+                mp_fn("  Step 3/7: Deriving miner scalar from seed (split-key)...")
+                seed_hash = _hashlib.sha512(pv_bytes).digest()
+                miner_scalar = bytearray(seed_hash[:32])
+                miner_scalar[0] &= 248
+                miner_scalar[31] &= 63
+                miner_scalar[31] |= 64
+                mp_fn(f"  Step 3/7: Miner scalar derived (full key never materializes)")
+            except Exception as e:
+                log_fn(f"SCALAR DERIVATION FAILED: {e}")
+                mp_fn(f"  FATAL: Failed to derive miner scalar: {e}")
+                mp_fn(f"  Traceback: {_tb.format_exc()}")
+                if on_error:
+                    on_error(str(e), pubkey)
+                return
 
-        try:
-            mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
-            mp_fn("    Connecting to Lit datil network...")
-            encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
-            mp_fn("  Step 4/7: Lit encryption SUCCEEDED (direct encrypt, real authSig)")
-            mp_fn(f"    encryptedInTEE: True")
-            mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
-            mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
-            mp_fn(f"    conditions: solRpcConditions (getBalance > 0)")
-        except Exception as e:
-            log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
-            mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
-            mp_fn(f"  The private key will NOT be uploaded in plaintext.")
-            mp_fn(f"  Lit Protocol must be reachable for blind uploads to work securely.")
-            mp_fn(f"  Traceback: {_tb.format_exc()}")
-            if on_error:
-                on_error(f"Lit encryption failed — upload aborted (key not exposed): {e}", pubkey)
-            return
+            try:
+                mp_fn("  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...")
+                mp_fn("    Sending miner scalar to TEE for combination with TEE scalar...")
+                mp_fn("    Full private key will ONLY exist inside TEE")
+                encrypted = split_key_encrypt(
+                    bytes(miner_scalar), session_blob, pubkey, seller_kp=seller_kp
+                )
+                mp_fn("  Step 4/7: Split-key encryption SUCCEEDED")
+                mp_fn(f"    splitKey: True")
+                mp_fn(f"    encryptedInTEE: True")
+                mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
+                mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
+            except Exception as e:
+                log_fn(f"ABORT: Split-key encryption failed: {e}")
+                mp_fn(f"  ABORT: Split-key encryption failed: {e}")
+                mp_fn(f"  The full private key was NEVER assembled on this machine.")
+                mp_fn(f"  Traceback: {_tb.format_exc()}")
+                if on_error:
+                    on_error(f"Split-key encryption failed — upload aborted (key never exposed): {e}", pubkey)
+                return
+        else:
+            try:
+                mp_fn("  Step 3/7: Encoding private key...")
+                sk = SigningKey(pv_bytes)
+                pb_bytes = bytes(sk.verify_key)
+                privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+                mp_fn(f"  Step 3/7: Private key encoded ({len(privkey_b58)} chars)")
+            except Exception as e:
+                log_fn(f"KEY ENCODING FAILED: {e}")
+                mp_fn(f"  FATAL: Failed to encode private key: {e}")
+                mp_fn(f"  Traceback: {_tb.format_exc()}")
+                if on_error:
+                    on_error(str(e), pubkey)
+                return
+
+            try:
+                mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
+                mp_fn("    Connecting to Lit datil network...")
+                encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+                mp_fn("  Step 4/7: Lit encryption SUCCEEDED (direct encrypt, real authSig)")
+                mp_fn(f"    encryptedInTEE: True")
+                mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
+                mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
+                mp_fn(f"    conditions: solRpcConditions (getBalance > 0)")
+            except Exception as e:
+                log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
+                mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
+                mp_fn(f"  The private key will NOT be uploaded in plaintext.")
+                mp_fn(f"  Lit Protocol must be reachable for blind uploads to work securely.")
+                mp_fn(f"  Traceback: {_tb.format_exc()}")
+                if on_error:
+                    on_error(f"Lit encryption failed — upload aborted (key not exposed): {e}", pubkey)
+                return
 
         try:
             mp_fn("  Step 5/7: Minting NFT on devnet...")
@@ -578,6 +621,8 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 "sellerAddress": seller_pubkey,
                 "encryptedInTEE": True,
             }
+            if is_split_key:
+                package_json["splitKey"] = True
             for extra_key in ("iv", "wrappedKey", "wrapIv", "litNetwork"):
                 if extra_key in encrypted:
                     package_json[extra_key] = encrypted[extra_key]

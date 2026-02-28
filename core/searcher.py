@@ -23,6 +23,7 @@ class Searcher:
         suffix_count: int = 0,
         suffix_width: int = 0,
         suffix_lengths: bytearray = None,
+        tee_point: bytes = None,
     ):
         if chosen_devices is None:
             devices = get_all_gpu_devices()
@@ -79,6 +80,14 @@ class Searcher:
             hostbuf=suffix_lengths,
         )
 
+        tee_buf = bytearray(tee_point) if tee_point else bytearray(32)
+        self.memobj_tee_point = cl.Buffer(
+            self.context,
+            cl.mem_flags.READ_ONLY | cl.mem_flags.COPY_HOST_PTR,
+            32,
+            hostbuf=tee_buf,
+        )
+
         self.output = bytearray(33)
         self.kernel.set_arg(0, self.memobj_key32)
         self.kernel.set_arg(1, self.memobj_output)
@@ -88,6 +97,7 @@ class Searcher:
         self.kernel.set_arg(5, np.uint32(self.suffix_count))
         self.kernel.set_arg(6, np.uint32(self.suffix_width))
         self.kernel.set_arg(7, self.memobj_suffix_lengths)
+        self.kernel.set_arg(8, self.memobj_tee_point)
 
     def find(self, log_stats: bool = True) -> bytearray:
         start_time = time.time()
@@ -124,6 +134,7 @@ def multi_gpu_init(
     suffix_count: int = 0,
     suffix_width: int = 0,
     suffix_lengths: bytearray = None,
+    tee_point: bytes = None,
 ) -> List:
     try:
         searcher = Searcher(
@@ -135,6 +146,7 @@ def multi_gpu_init(
             suffix_count=suffix_count,
             suffix_width=suffix_width,
             suffix_lengths=suffix_lengths,
+            tee_point=tee_point,
         )
         i = 0
         st = time.time()

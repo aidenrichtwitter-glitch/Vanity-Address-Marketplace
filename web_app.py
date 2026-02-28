@@ -66,11 +66,23 @@ def broadcast_event(event_type, data):
 def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_event, simple_suffix=None):
     try:
         import secrets
+        import hashlib as _hl
         from nacl.signing import SigningKey
         from base58 import b58encode
 
+        tee_point = mining_state.get("tee_point")
+        use_split_key = tee_point is not None and len(tee_point) == 32 and any(b != 0 for b in tee_point)
+
+        if use_split_key:
+            from nacl.bindings import (
+                crypto_scalarmult_ed25519_base_noclamp,
+                crypto_core_ed25519_add,
+            )
+
         if simple_suffix:
             broadcast_event("log", {"msg": f"CPU mining mode — simple suffix match: ends with '{simple_suffix}'"})
+        elif use_split_key:
+            broadcast_event("log", {"msg": "CPU mining mode (split-key) — no GPU required"})
         else:
             broadcast_event("log", {"msg": "CPU mining mode — no GPU required"})
         broadcast_event("status", {"msg": "Mining (CPU)..."})
@@ -87,9 +99,21 @@ def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_e
                 break
 
             seed = secrets.token_bytes(32)
-            sk = SigningKey(seed)
-            pk_bytes = bytes(sk.verify_key)
-            pubkey = b58encode(pk_bytes).decode()
+
+            if use_split_key:
+                h = _hl.sha512(seed).digest()
+                scalar = bytearray(h[:32])
+                scalar[0] &= 248
+                scalar[31] &= 63
+                scalar[31] |= 64
+                miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
+                combined_point = crypto_core_ed25519_add(miner_point, tee_point)
+                pubkey = b58encode(combined_point).decode()
+            else:
+                sk = SigningKey(seed)
+                pk_bytes = bytes(sk.verify_key)
+                pubkey = b58encode(pk_bytes).decode()
+
             keys_checked += 1
 
             if simple_suffix:
@@ -103,7 +127,7 @@ def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_e
                 word, padding = word_filter.check_address(pubkey)
 
             if word:
-                pv_bytes = bytes(sk)
+                pv_bytes = seed
                 suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
                 if mining_mode != "blind":
                     save_keypair(pv_bytes, output_dir, word=word, pubkey=pubkey)
@@ -190,20 +214,27 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
         result_count = 0
         start_time = time.time()
 
+        tee_point = mining_state.get("tee_point")
+
         from core.word_miner import _persistent_worker
 
         mp_ctx = multiprocessing.get_context("spawn")
         workers = []
         for idx in range(gpu_counts):
             p_conn, c_conn = mp_ctx.Pipe()
+            worker_kwargs = {
+                "suffix_buffer": suffix_buffer,
+                "suffix_count": suffix_count,
+                "suffix_width": suffix_width,
+                "suffix_lengths": suffix_lengths,
+            }
+            if tee_point:
+                worker_kwargs["tee_point"] = tee_point
             proc = mp_ctx.Process(
                 target=_persistent_worker,
                 args=(idx, kernel_source, iteration_bits, gpu_counts, None, c_conn,
                       power_pct, max_temp),
-                kwargs={"suffix_buffer": suffix_buffer,
-                        "suffix_count": suffix_count,
-                        "suffix_width": suffix_width,
-                        "suffix_lengths": suffix_lengths},
+                kwargs=worker_kwargs,
                 daemon=True,
             )
             proc.start()
@@ -298,6 +329,7 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
 
 def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
     price_sol = mining_state.get("blind_price_sol", 0)
+    session_blob = mining_state.get("session_blob")
 
     def _log(msg):
         broadcast_event("log", {"msg": f"[Blind] {msg}"})
@@ -312,6 +344,7 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
         pv_bytes, pubkey, wallet, vanity_word=vanity_word,
         price_sol=price_sol, log_fn=_log, mp_fn=_mp,
         on_error=_on_error,
+        session_blob=session_blob,
     )
 
 
@@ -456,9 +489,22 @@ def api_start():
     _stop_event = threading.Event()
 
     count_limit = 0
+    tee_point = None
+    session_blob = None
     if mining_mode == "blind":
         count_limit = len(word_filter.words)
         broadcast_event("log", {"msg": f"[Blind] Will stop after finding {count_limit} addresses (one per word)"})
+        try:
+            from core.marketplace.lit_encrypt import split_key_setup
+            broadcast_event("log", {"msg": "[Blind] Setting up split-key protocol with TEE..."})
+            session_result = split_key_setup()
+            tee_point = session_result["teePoint"]
+            session_blob = session_result
+            broadcast_event("log", {"msg": f"[Blind] Split-key setup complete (session: {session_result['sessionId'][:8]}...)"})
+            broadcast_event("log", {"msg": "[Blind] Mining with split-key: full private key will NEVER exist on this machine"})
+        except Exception as e:
+            broadcast_event("log", {"msg": f"[Blind] Split-key setup failed: {e}"})
+            broadcast_event("log", {"msg": "[Blind] Falling back to direct encryption mode"})
 
     with mining_lock:
         mining_state["running"] = True
@@ -473,6 +519,8 @@ def api_start():
         mining_state["blind_price_sol"] = blind_price_sol
         mining_state["count_limit"] = count_limit
         mining_state["compute_mode"] = compute_mode
+        mining_state["tee_point"] = tee_point
+        mining_state["session_blob"] = session_blob
 
     broadcast_event("status", {"msg": "Starting..."})
 
