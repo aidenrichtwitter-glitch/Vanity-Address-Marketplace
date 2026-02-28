@@ -160,7 +160,6 @@ def search_packages(search_filter=""):
     packages = [
         p for p in packages
         if p.get("nft_status") == "ACTIVE"
-        and p.get("verified") == "TEE Verified"
     ]
 
     search_filter = (search_filter or "").strip().lower()
