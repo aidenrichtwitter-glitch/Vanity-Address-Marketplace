@@ -1104,9 +1104,37 @@ connectSSE();
 setComputeMode('cpu');
 
 function createLitAccount() {
-    window.open('https://dashboard.dev.litprotocol.com', '_blank');
-    document.getElementById('litKeyStatus').textContent = 'Dashboard opened — copy your API key and paste it above, then click Save Profile.';
-    document.getElementById('litKeyStatus').style.color = '#6ea8fe';
+    const btn = document.querySelector('[onclick="createLitAccount()"]');
+    const status = document.getElementById('litKeyStatus');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+    status.textContent = 'Contacting Lit Protocol TEE...';
+    status.style.color = '#6ea8fe';
+
+    fetch('/api/settings/create-lit-key', {method: 'POST'})
+        .then(r => r.json())
+        .then(d => {
+            btn.disabled = false;
+            btn.textContent = 'Create Free API Key';
+            if (d.ok) {
+                status.textContent = 'API key created and saved! (' + d.api_key_masked + ')';
+                status.style.color = '#50e050';
+                document.getElementById('settingsLitKey').placeholder = 'Key set: ' + d.api_key_masked + ' (enter new value to change)';
+                document.getElementById('settingsLitKey').value = '';
+                const ss = document.getElementById('settingsStatus');
+                ss.textContent = 'New Lit API key created and saved to profile.';
+                ss.style.color = '#50e050';
+            } else {
+                status.textContent = 'Failed: ' + (d.error || 'unknown error');
+                status.style.color = '#e05050';
+            }
+        })
+        .catch(e => {
+            btn.disabled = false;
+            btn.textContent = 'Create Free API Key';
+            status.textContent = 'Failed: ' + e;
+            status.style.color = '#e05050';
+        });
 }
 
 function loadSettingsProfile() {

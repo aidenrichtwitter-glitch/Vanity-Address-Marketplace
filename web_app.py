@@ -806,6 +806,27 @@ def api_settings_save():
     return jsonify({"ok": True})
 
 
+@app.route("/api/settings/create-lit-key", methods=["POST"])
+def api_create_lit_key():
+    try:
+        from core.marketplace.lit_encrypt import create_lit_account
+        result = create_lit_account()
+        api_key = result["api_key"]
+        os.environ["LIT_API_KEY"] = api_key
+
+        profile = _load_web_profile()
+        profile["LIT_API_KEY"] = api_key
+        _save_web_profile(profile)
+
+        return jsonify({
+            "ok": True,
+            "api_key_masked": _mask_key(api_key),
+            "wallet_address": result.get("wallet_address", ""),
+        })
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/settings/clear", methods=["POST"])
 def api_settings_clear():
     if _PROFILE_PATH.exists():

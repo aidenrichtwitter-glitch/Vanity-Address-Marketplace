@@ -306,13 +306,50 @@ _DECRYPT_TEMPLATE = """
 """
 
 
+def create_lit_account(account_name: str = "") -> dict:
+    import uuid
+    if not account_name:
+        account_name = "solvanity_" + uuid.uuid4().hex[:8]
+
+    url = f"{LIT_API_BASE}/new_account"
+    payload = {
+        "account_name": account_name,
+        "account_description": "SolVanity Word Miner user account",
+    }
+
+    r = requests.post(url, json=payload, timeout=15, allow_redirects=False)
+    if r.status_code in (301, 302, 307, 308):
+        target = r.headers.get("location", "")
+        if not target:
+            raise RuntimeError("Lit API returned redirect with no location header")
+        r = requests.post(
+            target,
+            json=payload,
+            headers={"Content-Type": "application/json"},
+            timeout=30,
+        )
+
+    if r.status_code != 200:
+        raise RuntimeError(f"Lit account creation failed (HTTP {r.status_code}): {r.text[:300]}")
+
+    data = r.json()
+    api_key = data.get("api_key", "")
+    if not api_key:
+        raise RuntimeError("Lit API returned empty api_key")
+
+    return {
+        "api_key": api_key,
+        "wallet_address": data.get("wallet_address", ""),
+    }
+
+
 def _get_api_key() -> str:
     key = os.environ.get("LIT_API_KEY", "").strip()
     if not key:
         raise RuntimeError(
             "LIT_API_KEY environment variable is not set. "
-            "Create an account at https://dashboard.dev.litprotocol.com "
-            "or via POST to {}/new_account to get an API key.".format(LIT_API_BASE)
+            "Use the 'Create Free API Key' button in Settings, "
+            "or visit https://dashboard.dev.litprotocol.com"
         )
     return key
 

@@ -1554,11 +1554,37 @@ class MainWindow(QMainWindow):
         return tab
 
     def _open_lit_dashboard(self):
-        from PySide6.QtGui import QDesktopServices
-        from PySide6.QtCore import QUrl
-        QDesktopServices.openUrl(QUrl("https://dashboard.dev.litprotocol.com"))
-        self.lit_key_status.setText("Dashboard opened \u2014 copy your API key and paste it above, then Save Profile.")
+        self.lit_key_status.setText("Creating account...")
         self.lit_key_status.setStyleSheet("font-size: 10px; color: #6ea8fe; background: transparent;")
+        from PySide6.QtCore import QThread, Signal
+
+        class _CreateKeyThread(QThread):
+            done = Signal(str, str, str)
+
+            def run(self):
+                try:
+                    from core.marketplace.lit_encrypt import create_lit_account
+                    result = create_lit_account()
+                    self.done.emit(result["api_key"], result.get("wallet_address", ""), "")
+                except Exception as e:
+                    self.done.emit("", "", str(e))
+
+        def _on_done(api_key, wallet, error):
+            self._create_key_thread = None
+            if error:
+                self.lit_key_status.setText(f"Failed: {error}")
+                self.lit_key_status.setStyleSheet("font-size: 10px; color: #e05050; background: transparent;")
+                return
+            os.environ["LIT_API_KEY"] = api_key
+            self.settings_lit_key_edit.setText(api_key)
+            self._save_settings_profile()
+            masked = api_key[:4] + "****" + api_key[-4:] if len(api_key) >= 8 else api_key
+            self.lit_key_status.setText(f"API key created and saved! ({masked})")
+            self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
+
+        self._create_key_thread = _CreateKeyThread()
+        self._create_key_thread.done.connect(_on_done)
+        self._create_key_thread.start()
 
     def _save_settings_profile(self):
         lit_key = self.settings_lit_key_edit.text().strip()
