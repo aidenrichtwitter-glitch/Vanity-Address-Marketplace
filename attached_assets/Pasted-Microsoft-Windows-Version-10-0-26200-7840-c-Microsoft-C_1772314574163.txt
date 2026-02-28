@@ -1,0 +1,226 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[INFO 2026-02-28 15:35:15,216] Running split-key setup in TEE (session=5e8a18d6)...
+[INFO 2026-02-28 15:35:15,969] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 15:35:17,329] Split-key setup complete, TEE point received
+[INFO 2026-02-28 15:35:26,239] Running split-key setup in TEE (session=ed345d07)...
+[INFO 2026-02-28 15:35:26,621] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 15:35:27,774] Split-key setup complete, TEE point received
+[Blind] === BLIND UPLOAD START for DdSELtdUJzPDiauP... (injury) ===
+[MP] --- Upload started for DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury (injury) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[Blind] === BLIND UPLOAD START for Fj62atLdxc3TMYbR... (XXunit) ===
+[MP] --- Upload started for Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit (XXunit) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[Blind] === BLIND UPLOAD START for GBL86r6zhDVzuHWg... (X1eve1) ===
+[MP] --- Upload started for GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1 (X1eve1) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:35:58,862] Split-key encrypt in TEE for DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury...
+[Blind] === BLIND UPLOAD START for FwF6nj8eTAqKzpSr... (f1ight) ===
+[MP] --- Upload started for FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight (f1ight) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[Blind] === BLIND UPLOAD START for F8S8Ti9ojkavM9FU... (Xhe11o) ===
+[MP] --- Upload started for F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o (Xhe11o) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[INFO 2026-02-28 15:35:59,298] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury Error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury Error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury Error: Address mismatch: derived=DeuUmqWqSbrpcCyDDjhQ5rc933FP3TgMVkkGQSyHZMnM expected=DdSELtdUJzPDiauPJedUUmYKEddByLqMW9p34finjury
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:36:00,298] Split-key encrypt in TEE for Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit...
+[INFO 2026-02-28 15:36:00,709] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit Error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit Error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit Error: Address mismatch: derived=HJw4mZ5v8AXT4STZDGGgx1cvnfMM6roWhEFiXxztwqMH expected=Fj62atLdxc3TMYbRsoHmTqjMDFwhB8FcbQwVrxXXunit
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:36:01,610] Split-key encrypt in TEE for GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1...
+[INFO 2026-02-28 15:36:02,025] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1 Error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1 Error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1 Error: Address mismatch: derived=EtZNHgH2jfFA4RWwGDUpQUgRoRNLmL5YdfewibCciyUe expected=GBL86r6zhDVzuHWgTmBL4iFUeE2riN4M1h3Nz5X1eve1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:36:03,254] Split-key encrypt in TEE for FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight...
+[INFO 2026-02-28 15:36:03,643] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] === BLIND UPLOAD START for CopZ6EtBgj1TyqSZ... (aspect) ===
+[MP] --- Upload started for CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect (aspect) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight Error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight Error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight Error: Address mismatch: derived=rBB9t9aXyuYi5GnfxWcNF6DUuwB27gAMn5zBK9oQjHY expected=FwF6nj8eTAqKzpSrxuUZ9V3jxqJsKdAxUqNrXAf1ight
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:36:04,733] Split-key encrypt in TEE for F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o...
+[INFO 2026-02-28 15:36:05,118] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o Error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o Error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o Error: Address mismatch: derived=3hE2VohuVsUs8aBgdTqy4QD7Fs5LYHy7Z9YG6jjrDFNp expected=F8S8Ti9ojkavM9FUEXC5WyeQ35be1bVcfaRUD5Xhe11o
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 15:36:06,495] Split-key encrypt in TEE for CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect...
+[INFO 2026-02-28 15:36:06,921] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect Error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect Error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect Error: Address mismatch: derived=Hc1J4Du7tPf5HxamCqpT4N5ekHjWNxmw2oJs7ChK7LUQ expected=CopZ6EtBgj1TyqSZkzTiVYiFNKSFBMGJRx4Bcdaspect
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
