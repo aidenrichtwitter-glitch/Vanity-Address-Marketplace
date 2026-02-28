@@ -2384,16 +2384,39 @@ class MainWindow(QMainWindow):
             self._on_log(f"Conversion error: {e}")
 
     def _toggle_mining(self):
+        if getattr(self, '_mining_starting', False):
+            return
         if self.mining_thread and self.mining_thread.is_alive():
             self._stop_mining()
         else:
             self._start_mining()
 
     def _start_mining(self):
+        self._mining_starting = True
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("Starting...")
+        QApplication.processEvents()
+
+        try:
+            self._start_mining_inner()
+        except Exception as e:
+            self._on_log(f"Error starting mining: {e}")
+            self._mining_starting = False
+            self.start_btn.setEnabled(True)
+            self.start_btn.setText("Start Mining")
+            return
+
+    def _start_mining_inner(self):
+        def _abort():
+            self._mining_starting = False
+            self.start_btn.setEnabled(True)
+            self.start_btn.setText("Start Mining")
+
         if self._mining_mode == "blind":
             wallet = self.seller_wallet_edit.text().strip()
             if not wallet:
                 self._on_log("Blind Mode requires a seller wallet. Enter your key in the Seller Wallet field, or set SOLANA_DEVNET_PRIVKEY env var.")
+                _abort()
                 return
             try:
                 from core.marketplace.solana_client import load_seller_keypair
@@ -2401,6 +2424,7 @@ class MainWindow(QMainWindow):
                 self._on_log(f"Seller wallet validated: {kp.pubkey()}")
             except Exception as e:
                 self._on_log(f"Invalid seller key: {e}")
+                _abort()
                 return
 
         self.results_table.setRowCount(0)
@@ -2501,7 +2525,9 @@ class MainWindow(QMainWindow):
         self.start_btn.setText("Stop Mining")
         self.start_btn.setObjectName("stopBtn")
         self.start_btn.setStyle(self.start_btn.style())
+        self.start_btn.setEnabled(True)
         self._set_controls_enabled(False)
+        self._mining_starting = False
         self.status_label.setText("Starting...")
         self.start_time = time.time()
         self.timer.start(1000)
@@ -2510,13 +2536,16 @@ class MainWindow(QMainWindow):
     def _stop_mining(self):
         if self.mining_thread:
             self.status_label.setText("Stopping...")
+            self.start_btn.setEnabled(False)
             self.mining_thread.stop()
 
     def _on_stopped(self):
+        self._mining_starting = False
         self.timer.stop()
         self.start_btn.setText("Start Mining")
         self.start_btn.setObjectName("startBtn")
         self.start_btn.setStyle(self.start_btn.style())
+        self.start_btn.setEnabled(True)
         self._set_controls_enabled(True)
         if self.status_label.text() in ("Mining...", "Stopping...") or self.status_label.text().startswith("Mining"):
             self.status_label.setText("Stopped")
