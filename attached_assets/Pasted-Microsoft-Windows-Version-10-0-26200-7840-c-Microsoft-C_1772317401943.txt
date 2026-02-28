@@ -1,0 +1,80 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[INFO 2026-02-28 16:23:02,634] Running split-key setup in TEE (session=c581d4c1)...
+[INFO 2026-02-28 16:23:03,208] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 16:23:04,573] Split-key setup complete, TEE point received
+[Blind] === BLIND UPLOAD START for DsJmYaQjsr3zUBEE... (XXtoo1) ===
+[MP] --- Upload started for DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1 (XXtoo1) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 16:23:05,815] Split-key encrypt in TEE for DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1...
+[INFO 2026-02-28 16:23:06,229] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1 Error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1 Error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1 Error: Address mismatch: derived=8ZZ5UA1dWVGAPLfd1AYu2Bzr5RPCgHqy8rpwrNR7nyjk expected=DsJmYaQjsr3zUBEEGVAvaDkfcibShHnHnHggggXXtoo1
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+[Blind] === BLIND UPLOAD START for CyHHGbj9MQt9ndEv... (amount) ===
+[MP] --- Upload started for CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount (amount) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 16:23:13,223] Split-key encrypt in TEE for CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount...
+[INFO 2026-02-28 16:23:13,639] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount Error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   ABORT: Split-key encryption failed: Lit Action error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount Error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 548, in _upload_inner
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 513, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 392, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount Error: Address mismatch: derived=GWepUjJY1KmhaXJYZ39tsesPwKjWsqCGCC81qJWN8nS8 expected=CyHHGbj9MQt9ndEv7HwMmGsGc35VHEhuNACM28amount
+    at <user_provided_script>:106:13
+    at eventLoopTick (ext:core/01_core.js:177:7)
+
+

@@ -3747,8 +3747,8 @@ void fe_pow22523(ADDR_GENERIC fe out, const ADDR_GENERIC fe z) {
 
 inline __attribute__((always_inline))
 int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
-  fe d_val = {-10913610,13819322,18285313,-27395766,26581164,
-              6729176,-26908512,12299308,-13831728,21078490};
+  fe d_val = {-10913610,13857413,-15372611,6949391,114729,
+              -8787816,-6275908,-3247719,-18696448,-12055116};
   fe sqrtm1_val = {-32595792,-7943725,9377950,3500415,12389472,
                    -272473,-25146209,-2005654,326686,11406482};
   fe u, v, v3, vxx, check;
