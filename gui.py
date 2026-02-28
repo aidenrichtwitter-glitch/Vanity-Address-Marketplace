@@ -2452,6 +2452,7 @@ class MainWindow(QMainWindow):
                 self._on_log(f"[Blind] Split-key setup complete (session: {session_result['sessionId'][:8]}...)")
                 self._on_log("[Blind] Mining with split-key: full private key will NEVER exist on this machine")
             except Exception as e:
+                print(f"[Blind] Split-key setup failed: {e}", flush=True)
                 self._on_log(f"[Blind] Split-key setup failed: {e}")
                 self._on_log("[Blind] Falling back to direct encryption mode")
 

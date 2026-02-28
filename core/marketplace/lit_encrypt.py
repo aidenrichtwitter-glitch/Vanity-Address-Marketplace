@@ -4,6 +4,7 @@ import hmac
 import json
 import logging
 import os
+import time
 from typing import Optional
 
 import requests
@@ -325,7 +326,7 @@ def _derive_wrapping_key(api_key: str, conditions_json: str) -> str:
     return base64.b64encode(raw).decode("utf-8")
 
 
-def _run_lit_action(code: str) -> dict:
+def _run_lit_action(code: str, max_retries: int = 3) -> dict:
     api_key = _get_api_key()
     url = f"{LIT_API_BASE}/lit_action"
 
@@ -339,15 +340,34 @@ def _run_lit_action(code: str) -> dict:
         "X-Api-Key": api_key,
     }
 
-    resp = requests.post(url, json=payload, headers=headers, timeout=60,
-                         allow_redirects=False)
+    resp = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=60,
+                                 allow_redirects=False)
 
-    if resp.status_code in (301, 302, 303, 307, 308):
-        redirect_url = resp.headers.get("Location", "")
-        if redirect_url:
-            logger.info("Following redirect to %s", redirect_url[:80])
-            resp = requests.post(redirect_url, json=payload, headers=headers,
-                                 timeout=60)
+            if resp.status_code in (301, 302, 303, 307, 308):
+                redirect_url = resp.headers.get("Location", "")
+                if redirect_url:
+                    logger.info("Following redirect to %s", redirect_url[:80])
+                    resp = requests.post(redirect_url, json=payload, headers=headers,
+                                         timeout=60)
+
+            if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
+                wait = 2 ** attempt
+                logger.warning("TEE returned HTTP %d (attempt %d/%d) — retrying in %ds",
+                               resp.status_code, attempt, max_retries, wait)
+                time.sleep(wait)
+                continue
+            break
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                logger.warning("TEE request failed (attempt %d/%d): %s — retrying in %ds",
+                               attempt, max_retries, e, wait)
+                time.sleep(wait)
+            else:
+                raise
 
     if resp.status_code != 200:
         raise RuntimeError(

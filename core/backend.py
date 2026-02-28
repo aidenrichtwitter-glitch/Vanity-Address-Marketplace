@@ -18,6 +18,8 @@ log = logging.getLogger("backend")
 
 BOUNTIES_FILE = Path("bounties.json")
 
+_upload_lock = threading.Lock()
+
 _trusted_lit_hash_cache = None
 
 
@@ -487,6 +489,10 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
         mp_fn(f"  Protocol: Split-key (oblivious mining)")
 
     def _upload():
+        with _upload_lock:
+            _upload_inner()
+
+    def _upload_inner():
         try:
             mp_fn("  Step 1/7: Importing modules...")
             import base58 as b58_mod
