@@ -363,7 +363,23 @@ class MiningThread(threading.Thread):
                         if msg["type"] == "found":
                             output = msg["data"]
                             pv_bytes = bytes(output[1:])
-                            pubkey = get_public_key_from_private_bytes(pv_bytes)
+                            if self.tee_point:
+                                import hashlib
+                                from base58 import b58encode
+                                from nacl.bindings import (
+                                    crypto_scalarmult_ed25519_base_noclamp,
+                                    crypto_core_ed25519_add,
+                                )
+                                h = hashlib.sha512(pv_bytes).digest()
+                                scalar = bytearray(h[:32])
+                                scalar[0] &= 248
+                                scalar[31] &= 63
+                                scalar[31] |= 64
+                                miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
+                                combined_point = crypto_core_ed25519_add(miner_point, self.tee_point)
+                                pubkey = b58encode(combined_point).decode()
+                            else:
+                                pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
                             suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
                             if self.mining_mode != "blind":

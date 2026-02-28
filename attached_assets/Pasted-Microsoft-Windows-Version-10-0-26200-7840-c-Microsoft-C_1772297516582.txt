@@ -1,0 +1,135 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[INFO 2026-02-28 10:30:25,250] Running split-key setup in TEE (session=15c615aa)...
+[INFO 2026-02-28 10:30:25,828] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 10:30:26,956] Split-key setup complete, TEE point received
+[Blind] === BLIND UPLOAD START for 7pQQmYN1G8r1rXx4... (kqBBfV) ===
+[MP] --- Upload started for 7pQQmYN1G8r1rXx4HsJT7gtztHhFY6idLbGErnkqBBfV (kqBBfV) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[Blind] === BLIND UPLOAD START for 7r5bb9wdtYMfNnvT... (W6woMC) ===
+[MP] --- Upload started for 7r5bb9wdtYMfNnvTkMLW2C7nScjRrpLZKELJLMW6woMC (W6woMC) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[Blind] === BLIND UPLOAD START for 2xKg3csDP3AXG89V... (neweph) ===
+[MP] --- Upload started for 2xKg3csDP3AXG89Va8bvwJT7LkDvBoFYEcBuTfneweph (neweph) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[Blind] === BLIND UPLOAD START for 43Firmo8RXnj2wmi... (xcBDA7) ===
+[MP] --- Upload started for 43Firmo8RXnj2wmi7M1r2DxFZysxBRGTg6EXXMxcBDA7 (xcBDA7) ---
+[MP]   Price setting: 0.1000 SOL
+[MP]   Wallet: SGgqBh3k...(87 chars)
+[MP]   Protocol: Split-key (oblivious mining)
+[MP]   Step 1/7: Importing modules...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 1/7: Imports OK
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 2/7: Loading seller keypair...
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 2/7: Seller loaded: 4NeT9yE7G5hHLX4ezCp3KTJYwmUA4uJHujNzuBXnever
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 3/7: Deriving miner scalar from seed (split-key)...
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]   Step 3/7: Miner scalar derived (full key never materializes)
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[MP]     Full private key will ONLY exist inside TEE
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 10:30:58,080] Split-key encrypt in TEE for 7r5bb9wdtYMfNnvTkMLW2C7nScjRrpLZKELJLMW6woMC...
+[MP]   Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...
+[INFO 2026-02-28 10:30:58,080] Split-key encrypt in TEE for 7pQQmYN1G8r1rXx4HsJT7gtztHhFY6idLbGErnkqBBfV...
+[MP]     Full private key will ONLY exist inside TEE
+[MP]     Sending miner scalar to TEE for combination with TEE scalar...
+[INFO 2026-02-28 10:30:58,081] Split-key encrypt in TEE for 2xKg3csDP3AXG89Va8bvwJT7LkDvBoFYEcBuTfneweph...
+[MP]     Full private key will ONLY exist inside TEE
+[INFO 2026-02-28 10:30:58,082] Split-key encrypt in TEE for 43Firmo8RXnj2wmi7M1r2DxFZysxBRGTg6EXXMxcBDA7...
+[INFO 2026-02-28 10:30:58,675] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 10:30:58,696] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 10:30:58,734] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 10:30:58,741] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[Blind] ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 543, in _upload
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 480, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 353, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+
+[Blind] ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 543, in _upload
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 480, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 353, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+
+[Blind] ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 543, in _upload
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 480, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 353, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+
+[Blind] ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   ABORT: Split-key encryption failed: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+[MP]   The full private key was NEVER assembled on this machine.
+[MP]   Traceback: Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\backend.py", line 543, in _upload
+    encrypted = split_key_encrypt(
+                ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 480, in split_key_encrypt
+    result = _run_lit_action(code)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\marketplace\lit_encrypt.py", line 353, in _run_lit_action
+    raise RuntimeError(
+RuntimeError: Lit Action request failed (HTTP 500): "Internal server error.: Actions failed with : lit_node::Error { kind: Unexpected, source: Uncaught SyntaxError: Identifier 'P' has already been declared\n    at <anonymous> (<user_provided_script>:91:11), caller:  { file: \"src/actions/client/execution.rs:110:36\" } }"
+
+[ERROR 2026-02-28 10:33:03,348] [WinError 232] The pipe is being closed
+Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\word_miner.py", line 101, in _persistent_worker
+    conn.send({"type": "ready"})
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\multiprocessing\connection.py", line 206, in send
+    self._send_bytes(_ForkingPickler.dumps(obj))
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\multiprocessing\connection.py", line 289, in _send_bytes
+    ov, err = _winapi.WriteFile(self._handle, buf, overlapped=True)

@@ -267,7 +267,24 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
                     if msg["type"] == "found":
                         output = msg["data"]
                         pv_bytes = bytes(output[1:])
-                        pubkey = get_public_key_from_private_bytes(pv_bytes)
+                        tee_point = mining_state.get("tee_point")
+                        if tee_point:
+                            import hashlib
+                            from base58 import b58encode
+                            from nacl.bindings import (
+                                crypto_scalarmult_ed25519_base_noclamp,
+                                crypto_core_ed25519_add,
+                            )
+                            h = hashlib.sha512(pv_bytes).digest()
+                            scalar = bytearray(h[:32])
+                            scalar[0] &= 248
+                            scalar[31] &= 63
+                            scalar[31] |= 64
+                            miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
+                            combined_point = crypto_core_ed25519_add(miner_point, tee_point)
+                            pubkey = b58encode(combined_point).decode()
+                        else:
+                            pubkey = get_public_key_from_private_bytes(pv_bytes)
                         word, padding = word_filter.check_address(pubkey)
                         suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
                         if mining_mode != "blind":
