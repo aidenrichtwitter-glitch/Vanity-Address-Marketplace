@@ -3961,7 +3961,9 @@ __kernel void generate_pubkey(constant uchar *seed, global uchar *out,
       tee_active = nonzero ? 1 : 0;
       if (tee_active) {
         ge_p3 tmp;
-        ge_frombytes_vartime(&tmp, tee_point);
+        uchar tee_local[32];
+        for (int i = 0; i < 32; i++) tee_local[i] = tee_point[i];
+        ge_frombytes_vartime(&tmp, tee_local);
         for (int i = 0; i < 10; i++) tee_decoded_raw[i] = tmp.X[i];
         for (int i = 0; i < 10; i++) tee_decoded_raw[10+i] = tmp.Y[i];
         for (int i = 0; i < 10; i++) tee_decoded_raw[20+i] = tmp.Z[i];
