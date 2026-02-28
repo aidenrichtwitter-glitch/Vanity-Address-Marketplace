@@ -1,0 +1,81 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\Aiden\Desktop\Gpu-Vanity-Miner>python gui.py
+[INFO 2026-02-28 10:13:30,244] Running split-key setup in TEE (session=7d19954c)...
+[INFO 2026-02-28 10:13:30,799] Following redirect to https://36da669c852c9bd4fdea27dd331c07ff776bd125-8000.dstack-pha-prod5.phala.net
+[INFO 2026-02-28 10:13:31,800] Split-key setup complete, TEE point received
+1 error generated.
+[ERROR 2026-02-28 10:13:32,650] clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE
+
+Build on <pyopencl.Device 'NVIDIA GeForce RTX 3080 Ti Laptop GPU' on 'NVIDIA CUDA' at 0x18b95ac0d70>:
+
+<kernel>:3964:36: error: passing '__constant uchar *' (aka '__constant unsigned char *') to parameter of type 'const __generic unsigned char *' changes address space of pointer
+        ge_frombytes_vartime(&tmp, tee_point);
+                                   ^~~~~~~~~
+<kernel>:3749:57: note: passing argument to parameter 's' here
+int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
+                                                        ^
+
+(options: -I C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\cl)
+Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\word_miner.py", line 90, in _persistent_worker
+    searcher = Searcher(
+               ^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\searcher.py", line 42, in __init__
+    program = cl.Program(self.context, kernel_source).build()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\__init__.py", line 569, in build
+    self._build_and_catch_errors(
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\__init__.py", line 629, in _build_and_catch_errors
+    raise err
+pyopencl._cl.RuntimeError: clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE
+
+Build on <pyopencl.Device 'NVIDIA GeForce RTX 3080 Ti Laptop GPU' on 'NVIDIA CUDA' at 0x18b95ac0d70>:
+
+<kernel>:3964:36: error: passing '__constant uchar *' (aka '__constant unsigned char *') to parameter of type 'const __generic unsigned char *' changes address space of pointer
+        ge_frombytes_vartime(&tmp, tee_point);
+                                   ^~~~~~~~~
+<kernel>:3749:57: note: passing argument to parameter 's' here
+int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
+                                                        ^
+
+(options: -I C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\cl)
+[ERROR 2026-02-28 10:13:33,112] clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE
+
+Build on <pyopencl.Device 'Intel(R) Iris(R) Xe Graphics' on 'Intel(R) OpenCL HD Graphics' at 0x1db46844a70>:
+
+1:3964:36: error: passing '__constant uchar *' (aka '__constant unsigned char *') to parameter of type 'const unsigned char *' changes address space of pointer
+        ge_frombytes_vartime(&tmp, tee_point);
+                                   ^~~~~~~~~
+1:3749:57: note: passing argument to parameter 's' here
+int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
+                                                        ^
+
+(options: -I C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\cl)
+(source saved as C:\Users\Aiden\AppData\Local\Temp\tmp0b_hse7u.cl)
+Traceback (most recent call last):
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\word_miner.py", line 90, in _persistent_worker
+    searcher = Searcher(
+               ^^^^^^^^^
+  File "C:\Users\Aiden\Desktop\Gpu-Vanity-Miner\core\searcher.py", line 42, in __init__
+    program = cl.Program(self.context, kernel_source).build()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\__init__.py", line 577, in build
+    self._prg, was_cached = self._build_and_catch_errors(
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\__init__.py", line 629, in _build_and_catch_errors
+    raise err
+pyopencl._cl.RuntimeError: clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE - clBuildProgram failed: BUILD_PROGRAM_FAILURE
+
+Build on <pyopencl.Device 'Intel(R) Iris(R) Xe Graphics' on 'Intel(R) OpenCL HD Graphics' at 0x1db46844a70>:
+
+1:3964:36: error: passing '__constant uchar *' (aka '__constant unsigned char *') to parameter of type 'const unsigned char *' changes address space of pointer
+        ge_frombytes_vartime(&tmp, tee_point);
+                                   ^~~~~~~~~
+1:3749:57: note: passing argument to parameter 's' here
+int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
+                                                        ^
+
+(options: -I C:\Users\Aiden\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.12_qbz5n2kfra8p0\LocalCache\local-packages\Python312\site-packages\pyopencl\cl)
+(source saved as C:\Users\Aiden\AppData\Local\Temp\tmp0b_hse7u.cl)
