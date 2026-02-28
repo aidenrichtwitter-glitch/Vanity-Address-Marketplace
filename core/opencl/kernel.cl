@@ -3789,7 +3789,7 @@ int ge_frombytes_vartime(ge_p3 *h, const unsigned char *s) {
 
 inline __attribute__((always_inline))
 void ge_p3_to_cached(ge_cached *r, const ge_p3 *p) {
-  fe d2_val = {-21827239,-5839606,30745221,13898782,229458,
+  fe d2_val = {-21827239,-5839606,-30745221,13898782,229458,
                15978800,-12551817,-6495438,29715968,9444199};
   fe_add(r->YplusX, p->Y, p->X);
   fe_sub(r->YminusX, p->Y, p->X);
