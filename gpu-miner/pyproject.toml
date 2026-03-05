@@ -1,0 +1,13 @@
+[project]
+name = "solvanity-gpu-miner"
+version = "0.1.0"
+description = "GPU-accelerated Solana vanity address miner using OpenCL"
+requires-python = ">=3.11"
+dependencies = [
+    "base58>=2.1.1",
+    "click>=8.3.1",
+    "pynacl>=1.6.2",
+    "pyopencl>=2026.1.2",
+    "pyside6>=6.10.2",
+    "rich>=14.3.3",
+]

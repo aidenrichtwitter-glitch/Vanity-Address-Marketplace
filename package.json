@@ -1,0 +1,9 @@
+{
+  "name": "vanity-address-marketplace",
+  "version": "1.0.0",
+  "description": "Solana Devnet Blind Vanity Address Marketplace",
+  "type": "module",
+  "dependencies": {
+    "@replit/connectors-sdk": "^0.2.0"
+  }
+}
