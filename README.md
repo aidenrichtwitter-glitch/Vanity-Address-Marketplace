@@ -32,17 +32,20 @@ The split-key Ed25519 protocol ensures no single party ever holds the complete p
 Seller                          Solana Devnet                    Buyer
   │                                  │                              │
   ├─ Mine vanity address (GPU)       │                              │
-  ├─ TEE encrypts private key ──────►│ Upload to PDA               │
-  ├─ Mint SPL token NFT ───────────►│ NFT in PDA's ATA            │
+  ├─ TEE encrypts private key        │                              │
+  ├─ Mint SPL token (client-side) ──►│                              │
+  ├─ Upload encrypted JSON to PDA ──►│                              │
+  ├─ Transfer NFT to PDA's ATA ────►│                              │
   │                                  │                              │
-  │                                  │◄──────── Buy (SOL payment)──┤
-  │                                  │ ─── NFT transferred ───────►│
+  │                                  │◄──── Buy (SOL payment) ─────┤
+  │                           SOL ──►│ seller                       │
+  │                                  │──── NFT to buyer ATA ──────►│
   │                                  │                              │
-  │                                  │◄──────── Burn NFT ──────────┤
+  │                                  │◄──── Burn NFT ──────────────┤
   │                                  │                              │
-  │                                  │  TEE verifies burn on-chain  │
-  │                                  │  TEE decrypts key ─────────►│
-  │                                  │                              ├─ Save key file
+  │                            TEE verifies burn tx on Solana RPC   │
+  │                            TEE decrypts key ──────────────────►│
+  │                                  │                         Save key file
 ```
 
 ### Encryption Architecture
@@ -228,21 +231,19 @@ python main.py
 
 | Instruction | Discriminator | Description |
 |-------------|--------------|-------------|
-| Upload | `a56967a8e5d6b1fb` | Creates PDA, stores encrypted JSON, mints NFT, sets price |
-| Buy | `b27a78b9f6e7c20c` | Transfers SOL to seller, transfers NFT to buyer, updates PDA owner |
+| Upload | `a56967a8e5d6b1fb` | Creates PDA, stores encrypted JSON + authority + price |
+| Buy | `b27a78b9f6e7c20c` | Validates seller, transfers SOL to seller, creates buyer ATA if needed, transfers NFT from PDA to buyer |
 
 **Account Discriminator:** `184662bf3a907b9e` (first 8 bytes of every PDA account)
 
 **PDA Layout:**
 - 8 bytes: account discriminator
-- 32 bytes: seller pubkey
-- 32 bytes: owner pubkey (updated on buy)
 - 32 bytes: vanity pubkey
-- 32 bytes: NFT mint address
-- 8 bytes: price in lamports
-- 1 byte: status (0=Active, 1=Sold)
 - 4 bytes: JSON length (little-endian u32)
 - N bytes: encrypted JSON package
+- 32 bytes: authority pubkey (seller)
+- 1 byte: PDA bump seed
+- 8 bytes: price in lamports
 
 ## Shared Constants
 
