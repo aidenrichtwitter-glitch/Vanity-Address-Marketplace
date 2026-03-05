@@ -1,6 +1,5 @@
 import base64
 import hashlib
-import hmac
 import json
 import logging
 import os
@@ -9,7 +8,7 @@ from typing import Optional
 
 import requests
 
-from core.marketplace.config import SOL_RPC_CONDITIONS, LIT_API_BASE
+from core.marketplace.config import SOL_RPC_CONDITIONS, LIT_API_BASE, MARKETPLACE_PKP_PUBLIC_KEY, MARKETPLACE_LIT_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -72,15 +71,41 @@ const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf instanceof
 const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 """
 
+_PKP_DERIVE_WRAPPING_KEY_JS = r"""
+async function deriveWrappingKeyFromPKP(pkpPubKey, purpose, keyUsages) {
+  const digestBytes = new Uint8Array(
+    await crypto.subtle.digest("SHA-256",
+      new TextEncoder().encode(purpose))
+  );
+  const sigHex = await LitActions.signEcdsa({
+    toSign: Array.from(digestBytes),
+    publicKey: pkpPubKey,
+    sigName: "wk_" + purpose.slice(0, 16).replace(/[^a-zA-Z0-9]/g, "_")
+  });
+  const sigBytes = new Uint8Array(sigHex.length / 2);
+  for (let i = 0; i < sigHex.length; i += 2) {
+    sigBytes[i/2] = parseInt(sigHex.substr(i, 2), 16);
+  }
+  const keyRaw = new Uint8Array(
+    await crypto.subtle.digest("SHA-256", sigBytes)
+  );
+  return await crypto.subtle.importKey(
+    "raw", keyRaw, "AES-GCM", false, keyUsages
+  );
+}
+"""
+
 _SPLIT_KEY_SETUP_TEMPLATE = """
 (async () => {{
   try {{
     {ed25519_js}
+    {pkp_derive_js}
 
-    const wrappingKeyB64 = {wrapping_key_json};
-    const wrappingKeyRaw = fromB64(wrappingKeyB64);
-    const wrappingKey = await crypto.subtle.importKey(
-      "raw", wrappingKeyRaw, "AES-GCM", false, ["encrypt"]
+    const pkpPubKey = {pkp_public_key_json};
+    const sessionId = {session_id_json};
+
+    const wrappingKey = await deriveWrappingKeyFromPKP(
+      pkpPubKey, "solvanity-session:" + sessionId, ["encrypt"]
     );
 
     const tRaw = crypto.getRandomValues(new Uint8Array(64));
@@ -115,23 +140,24 @@ _SPLIT_KEY_ENCRYPT_TEMPLATE = """
 (async () => {{
   try {{
     {ed25519_js}
+    {pkp_derive_js}
 
+    const pkpPubKey = {pkp_public_key_json};
+    const sessionId = {session_id_json};
     const minerScalarB64 = {miner_scalar_json};
     const wrappedScalarB64 = {wrapped_scalar_json};
     const wrapIvB64 = {wrap_iv_json};
-    const wrappingKeyB64 = {wrapping_key_json};
     const conditionsJson = {cond_json};
     const expectedAddress = {expected_addr_json};
 
-    const wrappingKeyRaw = fromB64(wrappingKeyB64);
-    const wrappingKey = await crypto.subtle.importKey(
-      "raw", wrappingKeyRaw, "AES-GCM", false, ["decrypt"]
+    const sessionKey = await deriveWrappingKeyFromPKP(
+      pkpPubKey, "solvanity-session:" + sessionId, ["decrypt"]
     );
 
     const wrappedScalar = fromB64(wrappedScalarB64);
     const wrapIv = fromB64(wrapIvB64);
     const tBytesBuf = await crypto.subtle.decrypt(
-      {{ name: "AES-GCM", iv: wrapIv }}, wrappingKey, wrappedScalar
+      {{ name: "AES-GCM", iv: wrapIv }}, sessionKey, wrappedScalar
     );
     const tBytes = new Uint8Array(tBytesBuf);
 
@@ -164,10 +190,8 @@ _SPLIT_KEY_ENCRYPT_TEMPLATE = """
 
     const privB58 = b58enc(new Uint8Array([...kBytes, ...pubBytes]));
 
-    const encWrappingKeyB64 = {enc_wrapping_key_json};
-    const encWrappingKeyRaw = fromB64(encWrappingKeyB64);
-    const encWrappingKey = await crypto.subtle.importKey(
-      "raw", encWrappingKeyRaw, "AES-GCM", false, ["encrypt"]
+    const encWrappingKey = await deriveWrappingKeyFromPKP(
+      pkpPubKey, "solvanity-wrap:" + conditionsJson, ["encrypt"]
     );
 
     const dataKey = await crypto.subtle.generateKey(
@@ -211,13 +235,14 @@ _SPLIT_KEY_ENCRYPT_TEMPLATE = """
 _ENCRYPT_TEMPLATE = """
 (async () => {{
   try {{
+    {pkp_derive_js}
+
+    const pkpPubKey = {pkp_public_key_json};
     const dataStr = {data_json};
     const conditionsJson = {cond_json};
-    const wrappingKeyB64 = {wrapping_key_json};
 
-    const wrappingKeyRaw = Uint8Array.from(atob(wrappingKeyB64), c => c.charCodeAt(0));
-    const wrappingKey = await crypto.subtle.importKey(
-      "raw", wrappingKeyRaw, "AES-GCM", false, ["encrypt"]
+    const wrappingKey = await deriveWrappingKeyFromPKP(
+      pkpPubKey, "solvanity-wrap:" + conditionsJson, ["encrypt"]
     );
 
     const dataKey = await crypto.subtle.generateKey(
@@ -263,17 +288,46 @@ _ENCRYPT_TEMPLATE = """
 _DECRYPT_TEMPLATE = """
 (async () => {{
   try {{
+    const mintAddress = {mint_address_json};
+    const rpcUrl = "https://api.devnet.solana.com";
+
+    let supply = -1;
+    for (let attempt = 0; attempt < 5; attempt++) {{
+      const supplyResp = await fetch(rpcUrl, {{
+        method: "POST",
+        headers: {{ "Content-Type": "application/json" }},
+        body: JSON.stringify({{
+          jsonrpc: "2.0", id: 1,
+          method: "getTokenSupply",
+          params: [mintAddress, {{ commitment: "confirmed" }}]
+        }})
+      }});
+      const supplyData = await supplyResp.json();
+      if (supplyData?.error) {{
+        if (attempt < 4) {{ await new Promise(r => setTimeout(r, 2000)); continue; }}
+        throw new Error("RPC error verifying burn: " + JSON.stringify(supplyData.error));
+      }}
+      supply = parseInt(supplyData?.result?.value?.amount || "1", 10);
+      if (supply === 0) break;
+      if (attempt < 4) await new Promise(r => setTimeout(r, 2000));
+    }}
+    if (supply !== 0) {{
+      throw new Error("NFT not burned (supply=" + supply + ") — decryption denied");
+    }}
+
+    {pkp_derive_js}
+
+    const pkpPubKey = {pkp_public_key_json};
+    const conditionsJson = {cond_json};
     const ciphertextB64 = {ct_json};
     const ivB64 = {iv_json};
     const wrappedKeyB64 = {wk_json};
     const wrapIvB64 = {wiv_json};
-    const wrappingKeyB64 = {wrapping_key_json};
 
     const fromB64 = (s) => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 
-    const wrappingKeyRaw = fromB64(wrappingKeyB64);
-    const wrappingKey = await crypto.subtle.importKey(
-      "raw", wrappingKeyRaw, "AES-GCM", false, ["decrypt"]
+    const wrappingKey = await deriveWrappingKeyFromPKP(
+      pkpPubKey, "solvanity-wrap:" + conditionsJson, ["decrypt"]
     );
 
     const wrappedKey = fromB64(wrappedKeyB64);
@@ -344,27 +398,214 @@ def create_lit_account(account_name: str = "") -> dict:
 
 
 def _get_api_key() -> str:
-    key = os.environ.get("LIT_API_KEY", "").strip()
+    return MARKETPLACE_LIT_API_KEY
+
+
+def _get_pkp_public_key() -> str:
+    key = os.environ.get("LIT_PKP_PUBLIC_KEY", "").strip()
     if not key:
-        raise RuntimeError(
-            "LIT_API_KEY environment variable is not set. "
-            "Use the 'Create Free API Key' button in Settings, "
-            "or visit https://dashboard.dev.litprotocol.com"
-        )
+        key = MARKETPLACE_PKP_PUBLIC_KEY
+        os.environ["LIT_PKP_PUBLIC_KEY"] = key
+        logger.info("Using default marketplace PKP: %s", key[:16])
     return key
 
 
-def _derive_wrapping_key(api_key: str, conditions_json: str) -> str:
-    raw = hmac.new(
-        api_key.encode("utf-8"),
-        conditions_json.encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    return base64.b64encode(raw).decode("utf-8")
-
-
-def _run_lit_action(code: str, max_retries: int = 3) -> dict:
+def setup_pkp_vault() -> dict:
     api_key = _get_api_key()
+    headers = {"X-Api-Key": api_key}
+
+    existing_key = os.environ.get("LIT_PKP_PUBLIC_KEY", "").strip()
+    if existing_key:
+        logger.info("PKP vault already configured: %s", existing_key[:16])
+        return {"pkp_public_key": existing_key, "created": False}
+
+    logger.info("Creating PKP vault wallet...")
+    r = requests.get(
+        f"{LIT_API_BASE}/create_wallet",
+        headers=headers, timeout=30, allow_redirects=True,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"PKP wallet creation failed (HTTP {r.status_code}): {r.text[:300]}")
+
+    wallet_address = r.json().get("wallet_address", "")
+    if not wallet_address:
+        raise RuntimeError("PKP wallet creation returned no wallet_address")
+
+    r = requests.get(
+        f"{LIT_API_BASE}/list_wallets",
+        params={"page_number": "1", "page_size": "50"},
+        headers=headers, timeout=30, allow_redirects=True,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"Failed to list wallets (HTTP {r.status_code})")
+
+    wallets = r.json()
+    pkp_public_key = ""
+    for w in wallets:
+        if w.get("wallet_address") == wallet_address:
+            pkp_public_key = w.get("public_key", "")
+            break
+
+    if not pkp_public_key or pkp_public_key == "unmanaged":
+        raise RuntimeError(f"Could not find public key for wallet {wallet_address}")
+
+    logger.info("PKP vault created: pubkey=%s", pkp_public_key[:16])
+
+    return {
+        "pkp_public_key": pkp_public_key,
+        "wallet_address": wallet_address,
+        "created": True,
+    }
+
+
+def register_ipfs_actions() -> dict:
+    api_key = _get_api_key()
+    pkp_public_key = _get_pkp_public_key()
+
+    existing_group_id = os.environ.get("LIT_GROUP_ID", "").strip()
+    if existing_group_id:
+        logger.info("PKP group already configured: %s", existing_group_id[:16])
+        return {"group_id": existing_group_id, "created": False}
+
+    try:
+        group_result = _create_pkp_group(api_key, pkp_public_key)
+        return group_result
+    except Exception as e:
+        logger.error("Group creation failed: %s", e)
+        raise
+
+
+def _create_pkp_group(api_key: str, pkp_public_key: str) -> dict:
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+
+    existing_group_id = os.environ.get("LIT_GROUP_ID", "").strip()
+    if existing_group_id:
+        logger.info("PKP group already configured: %s", existing_group_id[:16])
+        return {"group_id": existing_group_id, "created": False}
+
+    group_payload = {
+        "group_name": "SolVanity Trustless Vault",
+        "group_description": "PKP group for trustless vanity address encryption/decryption",
+        "permitted_actions": [],
+        "pkps": [],
+        "all_wallets_permitted": True,
+        "all_actions_permitted": True,
+    }
+
+    r = requests.post(
+        f"{LIT_API_BASE}/add_group",
+        json=group_payload,
+        headers=headers,
+        timeout=30,
+        allow_redirects=True,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"Group creation failed (HTTP {r.status_code}): {r.text[:300]}")
+
+    logger.info("PKP group created successfully")
+
+    r = requests.get(
+        f"{LIT_API_BASE}/list_groups",
+        params={"page_number": "0", "page_size": "10"},
+        headers={"X-Api-Key": api_key},
+        timeout=30,
+        allow_redirects=True,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(f"Failed to list groups (HTTP {r.status_code})")
+
+    groups = r.json()
+    group_id = ""
+    for g in groups:
+        if g.get("name") == "SolVanity Trustless Vault":
+            group_id = g.get("id", "")
+            break
+
+    if not group_id:
+        raise RuntimeError(
+            "Group created but could not retrieve group ID from list_groups. "
+            f"Groups returned: {json.dumps(groups)[:300]}"
+        )
+
+    logger.info("PKP group ID: %s", group_id)
+
+    r = requests.post(
+        f"{LIT_API_BASE}/add_pkp_to_group",
+        json={"group_id": group_id, "pkp_public_key": pkp_public_key},
+        headers=headers,
+        timeout=30,
+        allow_redirects=True,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"Failed to add PKP to group (HTTP {r.status_code}): {r.text[:300]}"
+        )
+    logger.info("PKP %s added to group", pkp_public_key[:16])
+
+    expiration = str(int(time.time()) + 365 * 24 * 3600)
+    r = requests.post(
+        f"{LIT_API_BASE}/add_usage_api_key",
+        json={"expiration": expiration, "balance": "1000000"},
+        headers=headers,
+        timeout=30,
+        allow_redirects=True,
+    )
+    if r.status_code == 200:
+        usage_data = r.json()
+        usage_api_key = usage_data.get("usage_api_key", usage_data.get("api_key", usage_data.get("key", "")))
+        if usage_api_key:
+            os.environ["LIT_USAGE_API_KEY"] = usage_api_key
+            logger.info("Default usage API key created and stored")
+    else:
+        logger.warning("Default usage API key creation failed (HTTP %d)", r.status_code)
+
+    os.environ["LIT_GROUP_ID"] = group_id
+    return {"group_id": group_id, "created": True}
+
+
+def create_user_scoped_key() -> str:
+    api_key = _get_api_key()
+
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    expiration = str(int(time.time()) + 365 * 24 * 3600)
+    payload = {"expiration": expiration, "balance": "1000000"}
+
+    scoped_key = ""
+    for attempt in range(5):
+        r = requests.post(
+            f"{LIT_API_BASE}/add_usage_api_key",
+            json=payload,
+            headers=headers,
+            timeout=30,
+            allow_redirects=True,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            scoped_key = data.get("usage_api_key", data.get("api_key", data.get("key", "")))
+            if scoped_key:
+                break
+        if attempt < 4 and r.status_code in (500, 502, 503):
+            time.sleep(2 ** attempt)
+            continue
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"Scoped key creation failed (HTTP {r.status_code}): {r.text[:300]}"
+            )
+
+    if not scoped_key:
+        raise RuntimeError("Scoped key creation returned empty key")
+
+    logger.info("User scoped key created successfully")
+    return scoped_key
+
+
+def _run_lit_action(code: str, max_retries: int = 3, api_key: Optional[str] = None) -> dict:
+    explicit_key = bool(api_key)
+    if not api_key:
+        usage_key = os.environ.get("LIT_USAGE_API_KEY", "").strip()
+        api_key = usage_key if usage_key else _get_api_key()
+    else:
+        usage_key = ""
     url = f"{LIT_API_BASE}/lit_action"
 
     payload = {
@@ -386,9 +627,17 @@ def _run_lit_action(code: str, max_retries: int = 3) -> dict:
             if resp.status_code in (301, 302, 303, 307, 308):
                 redirect_url = resp.headers.get("Location", "")
                 if redirect_url:
-                    logger.info("Following redirect to %s", redirect_url[:80])
                     resp = requests.post(redirect_url, json=payload, headers=headers,
                                          timeout=60)
+
+            if resp.status_code in (401, 403) and usage_key and api_key == usage_key:
+                logger.warning(
+                    "Scoped usage key rejected (HTTP %d) — falling back to primary API key",
+                    resp.status_code
+                )
+                api_key = _get_api_key()
+                headers["X-Api-Key"] = api_key
+                continue
 
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < max_retries:
                 wait = 2 ** attempt
@@ -438,6 +687,11 @@ def _template_hash(tmpl: str) -> str:
     return hashlib.sha256(tmpl.encode("utf-8")).hexdigest()
 
 
+_LEGACY_TEMPLATE_HASHES = {
+    "1eb0cee61481286e355e9f1222dc27b834934c3c3b23ea7fce52b74b4100eb53",
+    "b1689dcad2948d5c63d719d31ccf528211773e609e3deb46b2c43deca51df790",
+}
+
 _SPLIT_KEY_ENCRYPT_HASH = _template_hash(_SPLIT_KEY_ENCRYPT_TEMPLATE)
 _ENCRYPT_HASH = _template_hash(_ENCRYPT_TEMPLATE)
 _TRUSTED_TEMPLATE_HASHES = {_SPLIT_KEY_ENCRYPT_HASH, _ENCRYPT_HASH}
@@ -453,6 +707,10 @@ def get_trusted_template_hashes() -> set:
     return set(_TRUSTED_TEMPLATE_HASHES)
 
 
+def get_legacy_template_hashes() -> set:
+    return set(_LEGACY_TEMPLATE_HASHES)
+
+
 def get_lit_action_code() -> str:
     return _ENCRYPT_TEMPLATE
 
@@ -461,28 +719,74 @@ def _hash_executed_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+def _format_split_key_setup_template(session_id: str, pkp_public_key: str) -> str:
+    return _SPLIT_KEY_SETUP_TEMPLATE.format(
+        ed25519_js=_ED25519_JS,
+        pkp_derive_js=_PKP_DERIVE_WRAPPING_KEY_JS,
+        pkp_public_key_json=json.dumps(pkp_public_key),
+        session_id_json=json.dumps(session_id),
+    )
+
+
+def _format_split_key_encrypt_template(
+    miner_scalar_b64: str, wrapped_scalar_b64: str, wrap_iv_b64: str,
+    conditions_json: str, expected_addr: str, session_id: str,
+    pkp_public_key: str,
+) -> str:
+    return _SPLIT_KEY_ENCRYPT_TEMPLATE.format(
+        ed25519_js=_ED25519_JS,
+        pkp_derive_js=_PKP_DERIVE_WRAPPING_KEY_JS,
+        pkp_public_key_json=json.dumps(pkp_public_key),
+        session_id_json=json.dumps(session_id),
+        miner_scalar_json=json.dumps(miner_scalar_b64),
+        wrapped_scalar_json=json.dumps(wrapped_scalar_b64),
+        wrap_iv_json=json.dumps(wrap_iv_b64),
+        cond_json=json.dumps(conditions_json),
+        expected_addr_json=json.dumps(expected_addr),
+    )
+
+
+def _format_encrypt_template(
+    data_str: str, conditions_json: str, pkp_public_key: str,
+) -> str:
+    return _ENCRYPT_TEMPLATE.format(
+        pkp_derive_js=_PKP_DERIVE_WRAPPING_KEY_JS,
+        pkp_public_key_json=json.dumps(pkp_public_key),
+        data_json=json.dumps(data_str),
+        cond_json=json.dumps(conditions_json),
+    )
+
+
+def _format_decrypt_template(
+    mint_address: str, ciphertext: str, iv: str,
+    wrapped_key: str, wrap_iv: str,
+    conditions_json: str, pkp_public_key: str,
+) -> str:
+    return _DECRYPT_TEMPLATE.format(
+        pkp_derive_js=_PKP_DERIVE_WRAPPING_KEY_JS,
+        pkp_public_key_json=json.dumps(pkp_public_key),
+        mint_address_json=json.dumps(mint_address),
+        ct_json=json.dumps(ciphertext),
+        iv_json=json.dumps(iv),
+        wk_json=json.dumps(wrapped_key),
+        wiv_json=json.dumps(wrap_iv),
+        cond_json=json.dumps(conditions_json),
+    )
+
+
 def split_key_setup(
     session_id: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> dict:
-    api_key = _get_api_key()
+    pkp_public_key = _get_pkp_public_key()
     if session_id is None:
         session_id = os.urandom(16).hex()
 
-    wrapping_key_raw = hmac.new(
-        api_key.encode("utf-8"),
-        f"split-key-{session_id}".encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    wrapping_key_b64 = base64.b64encode(wrapping_key_raw).decode("utf-8")
-
-    code = _SPLIT_KEY_SETUP_TEMPLATE.format(
-        ed25519_js=_ED25519_JS,
-        wrapping_key_json=json.dumps(wrapping_key_b64),
-    )
+    code = _format_split_key_setup_template(session_id, pkp_public_key)
 
     logger.info("Running split-key setup in TEE (session=%s)...", session_id[:8])
 
-    result = _run_lit_action(code)
+    result = _run_lit_action(code, api_key=api_key)
 
     tee_point_b64 = result.get("teePoint", "")
     wrapped_scalar_b64 = result.get("wrappedScalar", "")
@@ -515,39 +819,29 @@ def split_key_encrypt(
     vanity_address: str,
     seller_kp=None,
     sol_rpc_conditions: Optional[list] = None,
+    api_key: Optional[str] = None,
 ) -> dict:
     if sol_rpc_conditions is None:
         sol_rpc_conditions = SOL_RPC_CONDITIONS
 
-    api_key = _get_api_key()
+    pkp_public_key = _get_pkp_public_key()
     session_id = session_blob["sessionId"]
-
-    wrapping_key_raw = hmac.new(
-        api_key.encode("utf-8"),
-        f"split-key-{session_id}".encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    wrapping_key_b64 = base64.b64encode(wrapping_key_raw).decode("utf-8")
-
     conditions_json = json.dumps(sol_rpc_conditions, sort_keys=True)
-    enc_wrapping_key_b64 = _derive_wrapping_key(api_key, conditions_json)
-
     miner_scalar_b64 = base64.b64encode(miner_scalar).decode("utf-8")
 
-    code = _SPLIT_KEY_ENCRYPT_TEMPLATE.format(
-        ed25519_js=_ED25519_JS,
-        miner_scalar_json=json.dumps(miner_scalar_b64),
-        wrapped_scalar_json=json.dumps(session_blob["wrappedScalar"]),
-        wrap_iv_json=json.dumps(session_blob["wrapIv"]),
-        wrapping_key_json=json.dumps(wrapping_key_b64),
-        cond_json=json.dumps(conditions_json),
-        expected_addr_json=json.dumps(vanity_address),
-        enc_wrapping_key_json=json.dumps(enc_wrapping_key_b64),
+    code = _format_split_key_encrypt_template(
+        miner_scalar_b64=miner_scalar_b64,
+        wrapped_scalar_b64=session_blob["wrappedScalar"],
+        wrap_iv_b64=session_blob["wrapIv"],
+        conditions_json=conditions_json,
+        expected_addr=vanity_address,
+        session_id=session_id,
+        pkp_public_key=pkp_public_key,
     )
 
     logger.info("Split-key encrypt in TEE for %s...", vanity_address)
 
-    result = _run_lit_action(code)
+    result = _run_lit_action(code, api_key=api_key)
 
     ciphertext = result.get("ciphertext", "")
     data_hash = result.get("dataToEncryptHash", "")
@@ -569,6 +863,7 @@ def split_key_encrypt(
         "splitKey": True,
         "litNetwork": "chipotle-dev",
         "litActionHash": _SPLIT_KEY_ENCRYPT_HASH,
+        "pkpPublicKey": pkp_public_key,
     }
 
     logger.info("Split-key encryption successful for %s", vanity_address)
@@ -580,23 +875,19 @@ def encrypt_private_key(
     vanity_address: str,
     seller_kp=None,
     sol_rpc_conditions: Optional[list] = None,
+    api_key: Optional[str] = None,
 ) -> dict:
     if sol_rpc_conditions is None:
         sol_rpc_conditions = SOL_RPC_CONDITIONS
 
-    api_key = _get_api_key()
+    pkp_public_key = _get_pkp_public_key()
     conditions_json = json.dumps(sol_rpc_conditions, sort_keys=True)
-    wrapping_key_b64 = _derive_wrapping_key(api_key, conditions_json)
 
-    code = _ENCRYPT_TEMPLATE.format(
-        data_json=json.dumps(privkey_b58),
-        cond_json=json.dumps(conditions_json),
-        wrapping_key_json=json.dumps(wrapping_key_b64),
-    )
+    code = _format_encrypt_template(privkey_b58, conditions_json, pkp_public_key)
 
     logger.info("Encrypting private key for %s via Chipotle TEE...", vanity_address)
 
-    result = _run_lit_action(code)
+    result = _run_lit_action(code, api_key=api_key)
 
     ciphertext = result.get("ciphertext", "")
     data_hash = result.get("dataToEncryptHash", "")
@@ -617,6 +908,7 @@ def encrypt_private_key(
         "encryptedInTEE": True,
         "litNetwork": "chipotle-dev",
         "litActionHash": _ENCRYPT_HASH,
+        "pkpPublicKey": pkp_public_key,
     }
 
     logger.info("Encryption successful for %s (hash: %s)", vanity_address, data_hash[:16])
@@ -628,39 +920,52 @@ def decrypt_private_key(
     buyer_kp=None,
     auth_sig: Optional[dict] = None,
     session_sigs: Optional[dict] = None,
+    mint_address: str = "",
+    api_key: Optional[str] = None,
 ) -> str:
-    api_key = _get_api_key()
+    pkp_public_key = encrypted_json.get("pkpPublicKey", "").strip()
+    if not pkp_public_key:
+        pkp_public_key = _get_pkp_public_key()
+
+    if not mint_address:
+        raise RuntimeError("mint_address required for decryption (TEE verifies burn on-chain)")
+
+    pkg_hash = encrypted_json.get("litActionHash", "")
+    if pkg_hash and pkg_hash in _LEGACY_TEMPLATE_HASHES:
+        raise RuntimeError(
+            "This package was encrypted with a legacy wrapping key (pre-PKP). "
+            "It cannot be decrypted with the current PKP-signed architecture. "
+            f"Legacy hash: {pkg_hash[:16]}..."
+        )
+
+    conditions = encrypted_json.get(
+        "solRpcConditions",
+        encrypted_json.get("accessControlConditions", SOL_RPC_CONDITIONS)
+    )
+    conditions_json = json.dumps(conditions, sort_keys=True)
 
     ciphertext = encrypted_json["ciphertext"]
     iv = encrypted_json.get("iv", "")
     wrapped_key = encrypted_json.get("wrappedKey", "")
     wrap_iv = encrypted_json.get("wrapIv", "")
 
-    conditions = encrypted_json.get(
-        "solRpcConditions",
-        encrypted_json.get("accessControlConditions", SOL_RPC_CONDITIONS)
+    code = _format_decrypt_template(
+        mint_address=mint_address,
+        ciphertext=ciphertext,
+        iv=iv,
+        wrapped_key=wrapped_key,
+        wrap_iv=wrap_iv,
+        conditions_json=conditions_json,
+        pkp_public_key=pkp_public_key,
     )
 
-    conditions_json = json.dumps(conditions, sort_keys=True)
-    wrapping_key_b64 = _derive_wrapping_key(api_key, conditions_json)
+    logger.info("Decrypting via Chipotle TEE (PKP-signed wrapping key)...")
 
-    code = _DECRYPT_TEMPLATE.format(
-        ct_json=json.dumps(ciphertext),
-        iv_json=json.dumps(iv),
-        wk_json=json.dumps(wrapped_key),
-        wiv_json=json.dumps(wrap_iv),
-        wrapping_key_json=json.dumps(wrapping_key_b64),
-    )
-
-    logger.info("Decrypting via Chipotle TEE...")
-
-    result = _run_lit_action(code)
-
+    result = _run_lit_action(code, api_key=api_key)
     plaintext = result.get("decryptedString", "")
-    if not plaintext:
-        raise RuntimeError(
-            f"Lit Action decrypt returned no plaintext: {list(result.keys())}"
-        )
 
-    logger.info("Decryption successful")
+    if not plaintext:
+        raise RuntimeError("Decrypt returned empty plaintext")
+
+    logger.info("Decryption successful via PKP-signed wrapping key")
     return plaintext

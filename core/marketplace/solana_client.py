@@ -17,6 +17,7 @@ from core.marketplace.config import (
     PROGRAM_ID,
     PDA_SEED_PREFIX,
     INSTRUCTION_DISCRIMINATOR,
+    BUY_INSTRUCTION_DISCRIMINATOR,
     ACCOUNT_DISCRIMINATOR,
     RPC_URL,
     SOL_RPC_CONDITIONS,
@@ -76,12 +77,14 @@ def build_upload_ix(
     vanity_pubkey: Pubkey,
     encrypted_json_bytes: bytes,
     seller: Pubkey,
+    price_lamports: int = 0,
 ) -> Instruction:
     data = (
         INSTRUCTION_DISCRIMINATOR
         + bytes(vanity_pubkey)
         + len(encrypted_json_bytes).to_bytes(4, "little")
         + encrypted_json_bytes
+        + price_lamports.to_bytes(8, "little")
     )
 
     accounts = [
@@ -91,6 +94,74 @@ def build_upload_ix(
     ]
 
     return Instruction(program_id=PROGRAM_ID, accounts=accounts, data=data)
+
+
+def build_buy_ix(
+    vanity_pubkey: Pubkey,
+    buyer: Pubkey,
+    seller: Pubkey,
+    mint: Pubkey,
+) -> Instruction:
+    from core.marketplace.nft import (
+        get_associated_token_address,
+        TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID,
+    )
+
+    pda = get_pda(vanity_pubkey)
+    pda_ata = get_associated_token_address(pda, mint)
+    buyer_ata = get_associated_token_address(buyer, mint)
+
+    data = BUY_INSTRUCTION_DISCRIMINATOR + bytes(vanity_pubkey)
+
+    accounts = [
+        AccountMeta(pda, is_signer=False, is_writable=True),
+        AccountMeta(buyer, is_signer=True, is_writable=True),
+        AccountMeta(seller, is_signer=False, is_writable=True),
+        AccountMeta(mint, is_signer=False, is_writable=False),
+        AccountMeta(pda_ata, is_signer=False, is_writable=True),
+        AccountMeta(buyer_ata, is_signer=False, is_writable=True),
+        AccountMeta(TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+        AccountMeta(SYSTEM_PROGRAM_ID, is_signer=False, is_writable=False),
+        AccountMeta(ASSOCIATED_TOKEN_PROGRAM_ID, is_signer=False, is_writable=False),
+    ]
+
+    return Instruction(program_id=PROGRAM_ID, accounts=accounts, data=data)
+
+
+def buy_from_pda(
+    buyer_kp: Keypair,
+    vanity_pubkey: Pubkey,
+    seller: Pubkey,
+    mint: Pubkey,
+    rpc_url: str = RPC_URL,
+) -> str:
+    client = Client(rpc_url)
+
+    ix = build_buy_ix(
+        vanity_pubkey=vanity_pubkey,
+        buyer=buyer_kp.pubkey(),
+        seller=seller,
+        mint=mint,
+    )
+
+    bh_resp = client.get_latest_blockhash(Confirmed)
+    blockhash = bh_resp.value.blockhash
+
+    msg = MessageV0.try_compile(
+        payer=buyer_kp.pubkey(),
+        instructions=[ix],
+        address_lookup_table_accounts=[],
+        recent_blockhash=blockhash,
+    )
+
+    tx = VersionedTransaction(msg, [buyer_kp])
+    sig_resp = client.send_transaction(
+        tx, opts=TxOpts(skip_preflight=True, preflight_commitment=Confirmed)
+    )
+    sig = str(sig_resp.value)
+    logger.info("BUY via PDA: buyer=%s seller=%s mint=%s sig=%s", buyer_kp.pubkey(), seller, mint, sig)
+    return sig
 
 
 COMPACT_KEY_MAP = {

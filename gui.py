@@ -35,7 +35,7 @@ def _load_profile():
     if p.exists():
         try:
             data = _json.loads(p.read_text(encoding="utf-8"))
-            for key in ("LIT_API_KEY", "SOLANA_DEVNET_PRIVKEY"):
+            for key in ("SOLANA_DEVNET_PRIVKEY", "LIT_PKP_PUBLIC_KEY", "LIT_GROUP_ID", "LIT_USAGE_API_KEY"):
                 val = data.get(key, "").strip()
                 if val and key not in os.environ:
                     os.environ[key] = val
@@ -1400,38 +1400,21 @@ class MainWindow(QMainWindow):
         desc.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; padding-bottom: 6px;")
         root.addWidget(desc)
 
-        api_box = QGroupBox("Lit Protocol API Key")
+        api_box = QGroupBox("Lit Protocol Usage Key")
         api_layout = QVBoxLayout(api_box)
         api_layout.setSpacing(6)
 
         api_desc = QLabel(
-            "Required for Blind Mode encryption. Get a key at "
-            "https://dashboard.dev.litprotocol.com"
+            "Required for Blind Mode encryption. Click below to generate "
+            "your personal usage key from the shared marketplace account."
         )
         api_desc.setWordWrap(True)
         api_desc.setStyleSheet("font-size: 10px; color: #7878a0; background: transparent;")
         api_layout.addWidget(api_desc)
 
-        api_row = QHBoxLayout()
-        api_row.setSpacing(8)
-        self.settings_lit_key_edit = QLineEdit()
-        self.settings_lit_key_edit.setEchoMode(QLineEdit.Password)
-        self.settings_lit_key_edit.setPlaceholderText("Enter your Lit Protocol API key")
-        existing_lit = os.environ.get("LIT_API_KEY", "")
-        if existing_lit:
-            self.settings_lit_key_edit.setText(existing_lit)
-        api_row.addWidget(self.settings_lit_key_edit)
-        lit_show_btn = QPushButton("Show/Hide")
-        lit_show_btn.setFixedWidth(90)
-        lit_show_btn.clicked.connect(lambda: self.settings_lit_key_edit.setEchoMode(
-            QLineEdit.Normal if self.settings_lit_key_edit.echoMode() == QLineEdit.Password else QLineEdit.Password
-        ))
-        api_row.addWidget(lit_show_btn)
-        api_layout.addLayout(api_row)
-
         create_key_row = QHBoxLayout()
         create_key_row.setSpacing(8)
-        create_key_btn = QPushButton("Create Free API Key")
+        create_key_btn = QPushButton("Generate Usage Key")
         create_key_btn.setFixedWidth(170)
         create_key_btn.setStyleSheet("""
             QPushButton {
@@ -1446,12 +1429,31 @@ class MainWindow(QMainWindow):
 
         self.lit_key_status = QLabel("")
         self.lit_key_status.setStyleSheet("font-size: 10px; background: transparent;")
-        if existing_lit:
-            self.lit_key_status.setText("Loaded from profile/environment")
+        existing_usage = os.environ.get("LIT_USAGE_API_KEY", "")
+        if existing_usage:
+            self.lit_key_status.setText("Usage key loaded from profile")
             self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
         create_key_row.addWidget(self.lit_key_status)
         create_key_row.addStretch()
         api_layout.addLayout(create_key_row)
+
+        api_row = QHBoxLayout()
+        api_row.setSpacing(8)
+        self.settings_lit_key_edit = QLineEdit()
+        self.settings_lit_key_edit.setEchoMode(QLineEdit.Password)
+        self.settings_lit_key_edit.setReadOnly(True)
+        self.settings_lit_key_edit.setPlaceholderText("Your usage key will appear here")
+        if existing_usage:
+            masked = existing_usage[:4] + "****" + existing_usage[-4:] if len(existing_usage) >= 8 else existing_usage
+            self.settings_lit_key_edit.setText(masked)
+        api_row.addWidget(self.settings_lit_key_edit)
+        lit_show_btn = QPushButton("Show/Hide")
+        lit_show_btn.setFixedWidth(90)
+        lit_show_btn.clicked.connect(lambda: self.settings_lit_key_edit.setEchoMode(
+            QLineEdit.Normal if self.settings_lit_key_edit.echoMode() == QLineEdit.Password else QLineEdit.Password
+        ))
+        api_row.addWidget(lit_show_btn)
+        api_layout.addLayout(api_row)
         root.addWidget(api_box)
 
         wallet_box = QGroupBox("Solana Devnet Seller Wallet")
@@ -1552,47 +1554,72 @@ class MainWindow(QMainWindow):
         return tab
 
     def _open_lit_dashboard(self):
-        self.lit_key_status.setText("Creating account...")
+        self.lit_key_status.setText("Setting up Lit Protocol (account + vault + group)...")
         self.lit_key_status.setStyleSheet("font-size: 10px; color: #6ea8fe; background: transparent;")
         from PySide6.QtCore import QThread, Signal
 
         class _CreateKeyThread(QThread):
+            progress = Signal(str)
             done = Signal(str, str, str)
 
             def run(self):
                 try:
-                    from core.marketplace.lit_encrypt import create_lit_account
-                    result = create_lit_account()
-                    self.done.emit(result["api_key"], result.get("wallet_address", ""), "")
+                    from core.marketplace.lit_encrypt import (
+                        _get_api_key, _get_pkp_public_key,
+                        register_ipfs_actions, create_user_scoped_key,
+                    )
+
+                    self.progress.emit("Configuring marketplace...")
+                    api_key = _get_api_key()
+                    _get_pkp_public_key()
+
+                    if not os.environ.get("LIT_GROUP_ID", "").strip():
+                        self.progress.emit("Creating access group...")
+                        try:
+                            register_ipfs_actions()
+                        except Exception:
+                            pass
+
+                    self.progress.emit("Creating your usage key...")
+                    scoped_key = create_user_scoped_key()
+                    os.environ["LIT_USAGE_API_KEY"] = scoped_key
+
+                    self.done.emit(scoped_key, "", "")
                 except Exception as e:
                     self.done.emit("", "", str(e))
 
-        def _on_done(api_key, wallet, error):
+        def _on_progress(msg):
+            self.lit_key_status.setText(msg)
+            self.lit_key_status.setStyleSheet("font-size: 10px; color: #6ea8fe; background: transparent;")
+
+        def _on_done(usage_key, _wallet, error):
             self._create_key_thread = None
             if error:
                 self.lit_key_status.setText(f"Failed: {error}")
                 self.lit_key_status.setStyleSheet("font-size: 10px; color: #e05050; background: transparent;")
                 return
-            os.environ["LIT_API_KEY"] = api_key
-            self.settings_lit_key_edit.setText(api_key)
+            masked = usage_key[:4] + "****" + usage_key[-4:] if len(usage_key) >= 8 else usage_key
+            self.settings_lit_key_edit.setText(masked)
             self._save_settings_profile()
-            masked = api_key[:4] + "****" + api_key[-4:] if len(api_key) >= 8 else api_key
-            self.lit_key_status.setText(f"API key created and saved! ({masked})")
+            self.lit_key_status.setText(f"Ready! Usage key: {masked}")
             self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
 
         self._create_key_thread = _CreateKeyThread()
+        self._create_key_thread.progress.connect(_on_progress)
         self._create_key_thread.done.connect(_on_done)
         self._create_key_thread.start()
 
     def _save_settings_profile(self):
-        lit_key = self.settings_lit_key_edit.text().strip()
         seller_key = self.settings_seller_key_edit.text().strip()
 
         data = {}
-        if lit_key:
-            data["LIT_API_KEY"] = lit_key
         if seller_key:
             data["SOLANA_DEVNET_PRIVKEY"] = seller_key
+
+        for env_key in ("LIT_PKP_PUBLIC_KEY", "LIT_GROUP_ID", "LIT_USAGE_API_KEY"):
+            val = os.environ.get(env_key, "").strip()
+            if val:
+                data[env_key] = val
 
         try:
             _save_profile(data)
@@ -1604,13 +1631,7 @@ class MainWindow(QMainWindow):
             self.settings_status_label.setStyleSheet("font-size: 11px; color: #e05050; background: transparent; padding: 4px 0;")
 
     def _apply_settings(self):
-        lit_key = self.settings_lit_key_edit.text().strip()
         seller_key = self.settings_seller_key_edit.text().strip()
-
-        if lit_key:
-            os.environ["LIT_API_KEY"] = lit_key
-            self.lit_key_status.setText("Applied to session")
-            self.lit_key_status.setStyleSheet("font-size: 10px; color: #50e050; background: transparent;")
 
         if seller_key:
             os.environ["SOLANA_DEVNET_PRIVKEY"] = seller_key

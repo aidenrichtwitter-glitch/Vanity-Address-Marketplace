@@ -222,6 +222,30 @@ def check_nft_supply(mint_address: str, rpc_url: str = RPC_URL) -> int:
     return supply
 
 
+def check_nft_supply_batch(mint_addresses: list, rpc_url: str = RPC_URL) -> dict:
+    BATCH_SIZE = 100
+    client = Client(rpc_url)
+    result = {}
+
+    for i in range(0, len(mint_addresses), BATCH_SIZE):
+        chunk = mint_addresses[i : i + BATCH_SIZE]
+        pubkeys = [Pubkey.from_string(addr) for addr in chunk]
+        resp = client.get_multiple_accounts(pubkeys, commitment=Confirmed)
+        for addr, acct in zip(chunk, resp.value):
+            if acct is None:
+                result[addr] = 0
+                continue
+            data = bytes(acct.data)
+            if len(data) < 44:
+                result[addr] = 0
+                continue
+            result[addr] = struct.unpack("<Q", data[36:44])[0]
+
+    logger.info("[check_nft_supply_batch] checked %d mints in %d batches",
+                len(mint_addresses), (len(mint_addresses) + BATCH_SIZE - 1) // BATCH_SIZE)
+    return result
+
+
 def check_token_balance(owner: Pubkey, mint_address: str, rpc_url: str = RPC_URL) -> int:
     client = Client(rpc_url)
     mint = Pubkey.from_string(mint_address)
@@ -236,3 +260,63 @@ def check_token_balance(owner: Pubkey, mint_address: str, rpc_url: str = RPC_URL
         return 0
     amount = struct.unpack("<Q", data[64:72])[0]
     return amount
+
+
+def check_token_balance_batch(owner: Pubkey, mint_addresses: list, rpc_url: str = RPC_URL) -> dict:
+    BATCH_SIZE = 100
+    client = Client(rpc_url)
+    result = {}
+
+    ata_mint_pairs = []
+    for addr in mint_addresses:
+        mint = Pubkey.from_string(addr)
+        ata = get_associated_token_address(owner, mint)
+        ata_mint_pairs.append((ata, addr))
+
+    for i in range(0, len(ata_mint_pairs), BATCH_SIZE):
+        chunk = ata_mint_pairs[i : i + BATCH_SIZE]
+        chunk_atas = [pair[0] for pair in chunk]
+        resp = client.get_multiple_accounts(chunk_atas, commitment=Confirmed)
+        for (_, mint_addr), acct in zip(chunk, resp.value):
+            if acct is None:
+                result[mint_addr] = 0
+                continue
+            data = bytes(acct.data)
+            if len(data) < 72:
+                result[mint_addr] = 0
+                continue
+            result[mint_addr] = struct.unpack("<Q", data[64:72])[0]
+
+    logger.info("[check_token_balance_batch] checked %d ATAs in %d batches",
+                len(mint_addresses), (len(mint_addresses) + BATCH_SIZE - 1) // BATCH_SIZE)
+    return result
+
+
+def check_pda_ata_balance_batch(owner_mint_pairs: list, rpc_url: str = RPC_URL) -> dict:
+    BATCH_SIZE = 100
+    client = Client(rpc_url)
+    result = {}
+
+    ata_key_list = []
+    for owner, mint_addr in owner_mint_pairs:
+        mint = Pubkey.from_string(mint_addr)
+        ata = get_associated_token_address(owner, mint)
+        ata_key_list.append((ata, mint_addr))
+
+    for i in range(0, len(ata_key_list), BATCH_SIZE):
+        chunk = ata_key_list[i : i + BATCH_SIZE]
+        chunk_atas = [pair[0] for pair in chunk]
+        resp = client.get_multiple_accounts(chunk_atas, commitment=Confirmed)
+        for (_, mint_addr), acct in zip(chunk, resp.value):
+            if acct is None:
+                result[mint_addr] = 0
+                continue
+            data = bytes(acct.data)
+            if len(data) < 72:
+                result[mint_addr] = 0
+                continue
+            result[mint_addr] = struct.unpack("<Q", data[64:72])[0]
+
+    logger.info("[check_pda_ata_balance_batch] checked %d ATAs in %d batches",
+                len(owner_mint_pairs), (len(owner_mint_pairs) + BATCH_SIZE - 1) // BATCH_SIZE)
+    return result

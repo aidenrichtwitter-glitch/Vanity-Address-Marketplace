@@ -206,23 +206,23 @@ def test_3_lit_action_templates():
 
     try:
         from core.marketplace.lit_encrypt import (
-            _ED25519_JS,
-            _SPLIT_KEY_SETUP_TEMPLATE,
-            _SPLIT_KEY_ENCRYPT_TEMPLATE,
+            _format_split_key_setup_template,
+            _format_split_key_encrypt_template,
             get_lit_action_hash,
         )
 
-        wrapping_key_b64 = base64.b64encode(os.urandom(32)).decode()
+        test_pkp = "03" + "ab" * 32
+        test_session = "test_session_12345"
 
-        setup_code = _SPLIT_KEY_SETUP_TEMPLATE.format(
-            ed25519_js=_ED25519_JS,
-            wrapping_key_json=json.dumps(wrapping_key_b64),
-        )
+        setup_code = _format_split_key_setup_template(test_session, test_pkp)
 
         assert "LitActions.setResponse" in setup_code, "Setup code missing LitActions.setResponse"
         assert "teePoint" in setup_code, "Setup code missing teePoint"
         assert "wrappedScalar" in setup_code, "Setup code missing wrappedScalar"
-        assert wrapping_key_b64 in setup_code, "Setup code missing wrapping key value"
+        assert test_pkp in setup_code, "Setup code missing PKP public key"
+        assert test_session in setup_code, "Setup code missing session ID"
+        assert "deriveWrappingKeyFromPKP" in setup_code, "Setup code missing PKP key derivation"
+        assert "LitActions.signEcdsa" in setup_code, "Setup code missing signEcdsa call"
         assert setup_code.count("{") == setup_code.count("}"), (
             f"Unbalanced braces in setup code: {{ = {setup_code.count('{')}, }} = {setup_code.count('}')}"
         )
@@ -230,25 +230,25 @@ def test_3_lit_action_templates():
         miner_scalar_b64 = base64.b64encode(os.urandom(32)).decode()
         wrapped_scalar_b64 = base64.b64encode(os.urandom(48)).decode()
         wrap_iv_b64 = base64.b64encode(os.urandom(12)).decode()
-        enc_wrapping_key_b64 = base64.b64encode(os.urandom(32)).decode()
         conditions_json = json.dumps([{"test": "condition"}], sort_keys=True)
         expected_addr = "SoMeVaNiTyAdDrEsS11111111111111111111111111"
 
-        encrypt_code = _SPLIT_KEY_ENCRYPT_TEMPLATE.format(
-            ed25519_js=_ED25519_JS,
-            miner_scalar_json=json.dumps(miner_scalar_b64),
-            wrapped_scalar_json=json.dumps(wrapped_scalar_b64),
-            wrap_iv_json=json.dumps(wrap_iv_b64),
-            wrapping_key_json=json.dumps(wrapping_key_b64),
-            cond_json=json.dumps(conditions_json),
-            expected_addr_json=json.dumps(expected_addr),
-            enc_wrapping_key_json=json.dumps(enc_wrapping_key_b64),
+        encrypt_code = _format_split_key_encrypt_template(
+            miner_scalar_b64=miner_scalar_b64,
+            wrapped_scalar_b64=wrapped_scalar_b64,
+            wrap_iv_b64=wrap_iv_b64,
+            conditions_json=conditions_json,
+            expected_addr=expected_addr,
+            session_id=test_session,
+            pkp_public_key=test_pkp,
         )
 
         assert "LitActions.setResponse" in encrypt_code, "Encrypt code missing LitActions.setResponse"
         assert "minerScalarB64" in encrypt_code, "Encrypt code missing minerScalarB64"
         assert "expectedAddress" in encrypt_code, "Encrypt code missing expectedAddress"
         assert expected_addr in encrypt_code, "Encrypt code missing expected address value"
+        assert test_pkp in encrypt_code, "Encrypt code missing PKP public key"
+        assert "deriveWrappingKeyFromPKP" in encrypt_code, "Encrypt code missing PKP key derivation"
         assert encrypt_code.count("{") == encrypt_code.count("}"), (
             f"Unbalanced braces in encrypt code: {{ = {encrypt_code.count('{')}, }} = {encrypt_code.count('}')}"
         )
@@ -262,8 +262,8 @@ def test_3_lit_action_templates():
 
         result.passed = True
         result.message = (
-            f"Setup template: {len(setup_code)} chars, braces balanced. "
-            f"Encrypt template: {len(encrypt_code)} chars, braces balanced. "
+            f"Setup template: {len(setup_code)} chars, braces balanced, PKP-based. "
+            f"Encrypt template: {len(encrypt_code)} chars, braces balanced, PKP-based. "
             f"Hash: {code_hash[:16]}... (stable)"
         )
     except Exception as e:
@@ -513,8 +513,11 @@ def test_7_production_code_paths():
             split_key_setup,
             split_key_encrypt,
             get_lit_action_hash,
-            _derive_wrapping_key,
             _hash_executed_code,
+            _get_pkp_public_key,
+            get_trusted_template_hashes,
+            _format_encrypt_template,
+            _format_decrypt_template,
         )
         from core.backend import blind_upload
         import inspect
@@ -532,16 +535,22 @@ def test_7_production_code_paths():
         params = list(upload_sig.parameters.keys())
         assert "session_blob" in params, f"blind_upload missing session_blob, has: {params}"
 
-        api_key = "test-api-key-for-integration"
-        cond_json = json.dumps([{"test": True}], sort_keys=True)
-        wk = _derive_wrapping_key(api_key, cond_json)
-        assert len(base64.b64decode(wk)) == 32, f"Wrapping key wrong size: {len(base64.b64decode(wk))}"
+        pkp_key = _get_pkp_public_key()
+        assert len(pkp_key) >= 64, f"PKP public key too short: {len(pkp_key)}"
+        assert pkp_key.startswith("0"), f"PKP key should be hex: {pkp_key[:8]}"
 
-        wk2 = _derive_wrapping_key(api_key, cond_json)
-        assert wk == wk2, "Wrapping key derivation not deterministic"
+        trusted_hashes = get_trusted_template_hashes()
+        assert len(trusted_hashes) == 2, f"Expected exactly 2 PKP trusted hashes, got {len(trusted_hashes)}"
 
-        wk3 = _derive_wrapping_key("different-key", cond_json)
-        assert wk3 != wk, "Different API keys should produce different wrapping keys"
+        enc_code = _format_encrypt_template("test_data", "[]", pkp_key)
+        assert "deriveWrappingKeyFromPKP" in enc_code, "Encrypt code missing PKP derivation"
+        assert "LitActions.signEcdsa" in enc_code, "Encrypt code missing signEcdsa"
+        assert pkp_key in enc_code, "Encrypt code missing PKP key"
+
+        dec_code = _format_decrypt_template("mint123", "ct", "iv", "wk", "wiv", "[]", pkp_key)
+        assert "deriveWrappingKeyFromPKP" in dec_code, "Decrypt code missing PKP derivation"
+        assert "NFT not burned" in dec_code, "Decrypt code missing burn check"
+        assert "getTokenSupply" in dec_code, "Decrypt code missing supply check"
 
         h1 = get_lit_action_hash()
         h2 = get_lit_action_hash()
@@ -598,7 +607,8 @@ def test_7_production_code_paths():
         result.passed = True
         result.message = (
             f"Production imports OK. API signatures verified. "
-            f"Wrapping key derivation deterministic and unique. "
+            f"PKP public key present ({pkp_key[:16]}...). "
+            f"Templates use PKP-signed wrapping keys. "
             f"Hash stable. blind_upload ran split-key path "
             f"({len(logs)} logs, {len(mp_logs)} mp_logs, {len(errors)} errors)."
         )

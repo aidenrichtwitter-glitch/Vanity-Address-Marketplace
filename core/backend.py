@@ -34,6 +34,19 @@ def _get_trusted_lit_hashes():
     return _trusted_lit_hash_cache
 
 
+_legacy_lit_hash_cache = None
+
+def _get_legacy_lit_hashes():
+    global _legacy_lit_hash_cache
+    if _legacy_lit_hash_cache is None:
+        try:
+            from core.marketplace.lit_encrypt import get_legacy_template_hashes
+            _legacy_lit_hash_cache = get_legacy_template_hashes()
+        except Exception:
+            _legacy_lit_hash_cache = set()
+    return _legacy_lit_hash_cache
+
+
 def _verify_package_hash(encrypted_json):
     stored_hash = encrypted_json.get("litActionHash", "")
     trusted = _get_trusted_lit_hashes()
@@ -114,18 +127,64 @@ def fulfill_bounty(bounty_id, vanity_address, mint_address):
 
 
 def _enrich_packages(packages):
-    from core.marketplace.nft import check_nft_supply
+    from core.marketplace.nft import check_nft_supply_batch, check_pda_ata_balance_batch
+    from core.marketplace.solana_client import get_pda
+    from solders.pubkey import Pubkey as SoldersPubkey
+
+    mint_map = {}
+    for pkg in packages:
+        mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
+        if mint_addr:
+            mint_map[mint_addr] = pkg
+
+    supply_results = {}
+    if mint_map:
+        try:
+            supply_results = check_nft_supply_batch(list(mint_map.keys()))
+        except Exception:
+            supply_results = {}
 
     for pkg in packages:
         mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
         if mint_addr:
-            try:
-                supply = check_nft_supply(mint_addr)
-                pkg["nft_status"] = "ACTIVE" if supply > 0 else "BURNED"
-            except Exception:
+            supply = supply_results.get(mint_addr)
+            if supply is None:
                 pkg["nft_status"] = "unknown"
+            else:
+                pkg["nft_status"] = "ACTIVE" if supply > 0 else "BURNED"
         else:
             pkg["nft_status"] = "no NFT"
+
+    pda_check_pairs = []
+    pda_check_mints = []
+    for pkg in packages:
+        if pkg.get("nft_status") != "ACTIVE":
+            continue
+        mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
+        vanity_addr = pkg.get("vanity_address", "")
+        if mint_addr and vanity_addr:
+            try:
+                vanity_pub = SoldersPubkey.from_string(vanity_addr)
+                pda = get_pda(vanity_pub)
+                pda_check_pairs.append((pda, mint_addr))
+                pda_check_mints.append(mint_addr)
+            except Exception:
+                pass
+
+    pda_balances = {}
+    if pda_check_pairs:
+        try:
+            pda_balances = check_pda_ata_balance_batch(pda_check_pairs)
+        except Exception as e:
+            log.error(f"[_enrich_packages] PDA ATA batch check failed: {e}")
+            pda_balances = {}
+
+    for pkg in packages:
+        mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
+        if mint_addr and pkg.get("nft_status") == "ACTIVE":
+            pkg["in_escrow"] = pda_balances.get(mint_addr, 0) > 0
+        else:
+            pkg["in_escrow"] = False
 
         enc_json = pkg.get("encrypted_json", {})
 
@@ -134,6 +193,8 @@ def _enrich_packages(packages):
             stored_hash = enc_json.get("litActionHash", "")
             if stored_hash and stored_hash in _get_trusted_lit_hashes():
                 pkg["verified"] = "TEE Verified"
+            elif stored_hash and stored_hash in _get_legacy_lit_hashes():
+                pkg["verified"] = "Legacy (Insecure)"
             else:
                 pkg["verified"] = "Unknown Code"
         else:
@@ -161,6 +222,7 @@ def search_packages(search_filter=""):
         p for p in packages
         if p.get("nft_status") == "ACTIVE"
         and p.get("verified") == "TEE Verified"
+        and p.get("in_escrow") == True
     ]
 
     search_filter = (search_filter or "").strip().lower()
@@ -183,7 +245,7 @@ def get_owned_nfts(buyer_key, log_fn=None):
 
     try:
         from core.marketplace.solana_client import load_seller_keypair, fetch_all_packages
-        from core.marketplace.nft import check_nft_supply, check_token_balance
+        from core.marketplace.nft import check_token_balance_batch
 
         buyer_kp = load_seller_keypair(buyer_key)
         buyer_pub = buyer_kp.pubkey()
@@ -192,19 +254,26 @@ def get_owned_nfts(buyer_key, log_fn=None):
         packages = fetch_all_packages()
         packages = _enrich_packages(packages)
 
-        owned = []
+        active_packages = []
+        active_mints = []
         for pkg in packages:
             if pkg.get("nft_status") != "ACTIVE":
                 continue
             mint_addr = pkg.get("encrypted_json", {}).get("mintAddress", "")
             if not mint_addr:
                 continue
+            active_packages.append(pkg)
+            active_mints.append(mint_addr)
+
+        owned = []
+        if active_mints:
             try:
-                balance = check_token_balance(buyer_pub, mint_addr)
-                if balance > 0:
-                    owned.append(pkg)
-            except Exception:
-                pass
+                balances = check_token_balance_batch(buyer_pub, active_mints)
+                for pkg, mint_addr in zip(active_packages, active_mints):
+                    if balances.get(mint_addr, 0) > 0:
+                        owned.append(pkg)
+            except Exception as e:
+                log_fn(f"Batch balance check failed: {e}")
 
         log_fn(f"Found {len(owned)} owned NFTs")
         return {"owned": owned, "wallet": str(buyer_pub)}, None
@@ -236,8 +305,8 @@ def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
         return None, verify_err
 
     try:
-        from core.marketplace.solana_client import load_seller_keypair, transfer_sol
-        from core.marketplace.nft import check_nft_supply, check_token_balance, transfer_nft
+        from core.marketplace.solana_client import load_seller_keypair, buy_from_pda
+        from core.marketplace.nft import check_nft_supply, check_token_balance
         from solders.pubkey import Pubkey as SoldersPubkey
 
         supply = check_nft_supply(mint_address)
@@ -255,10 +324,11 @@ def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
 
         price_lamports = int(encrypted_json.get("priceLamports", 0))
         seller_addr = encrypted_json.get("sellerAddress", "")
-        payment_sig = None
 
-        if price_lamports > 0 and seller_addr:
-            seller_pubkey = SoldersPubkey.from_string(seller_addr)
+        if not seller_addr:
+            return None, "Package missing seller address"
+
+        if price_lamports > 0:
             from solana.rpc.api import Client as SolClient
             from solana.rpc.commitment import Confirmed as SolConfirmed
             sol_client = SolClient("https://api.devnet.solana.com")
@@ -267,34 +337,33 @@ def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
             if buyer_balance < price_lamports + 10_000:
                 return None, f"Insufficient SOL. Need {price_lamports / 1e9:.4f} + fees, have {buyer_balance / 1e9:.4f}"
 
-            log_fn(f"  Paying {price_lamports / 1e9:.4f} SOL to {seller_addr[:12]}...")
-            payment_sig = transfer_sol(buyer_kp, seller_pubkey, price_lamports)
-            log_fn(f"  Payment sent: {payment_sig}")
-            time.sleep(2)
+        vanity_pubkey = SoldersPubkey.from_string(vanity_address)
+        seller_pubkey = SoldersPubkey.from_string(seller_addr)
+        mint_pubkey = SoldersPubkey.from_string(mint_address)
+
+        log_fn(f"  Executing on-chain buy (PDA escrow)...")
+        if price_lamports > 0:
+            log_fn(f"  Price: {price_lamports / 1e9:.4f} SOL to {seller_addr[:12]}...")
         else:
-            log_fn("  No payment required (free)")
+            log_fn("  Price: Free")
 
-        seller_key_env = seller_key_override or os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
-        if not seller_key_env:
-            return None, "Seller key not available for NFT transfer"
-
-        seller_kp_for_transfer = load_seller_keypair(seller_key_env)
-        if seller_addr and str(seller_kp_for_transfer.pubkey()) != seller_addr:
-            return None, f"Seller key mismatch: server key is {str(seller_kp_for_transfer.pubkey())[:12]}... but package seller is {seller_addr[:12]}..."
-
-        log_fn("  Transferring NFT to buyer...")
-        transfer_sig = transfer_nft(seller_kp_for_transfer, buyer_kp.pubkey(), mint_address)
-        log_fn(f"  NFT transferred: {transfer_sig}")
+        buy_sig = buy_from_pda(
+            buyer_kp=buyer_kp,
+            vanity_pubkey=vanity_pubkey,
+            seller=seller_pubkey,
+            mint=mint_pubkey,
+        )
+        log_fn(f"  Buy transaction: {buy_sig}")
 
         result = {
             "ok": True,
             "vanity_address": vanity_address,
             "mint_address": mint_address,
             "buyer": buyer_pub,
-            "transfer_sig": transfer_sig,
+            "transfer_sig": buy_sig,
         }
-        if payment_sig:
-            result["payment_sig"] = payment_sig
+        if price_lamports > 0:
+            result["payment_sig"] = buy_sig
             result["price_sol"] = price_lamports / 1_000_000_000
 
         log_fn("=== BUY NFT COMPLETE ===")
@@ -307,7 +376,7 @@ def buy_nft(buyer_key, encrypted_json, mint_address, vanity_address,
 
 
 def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
-                     log_fn=None):
+                     log_fn=None, skip_file_save=False):
     if log_fn is None:
         log_fn = lambda msg: log.info(msg)
 
@@ -347,28 +416,32 @@ def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
         burn_sig = burn_nft(buyer_kp, mint_address)
         log_fn(f"  NFT burned: {burn_sig}")
 
+        import time as _time
+        log_fn("  Waiting for burn confirmation to propagate...")
+        _time.sleep(4)
+
         privkey = encrypted_json.get("privateKey", "")
         if not privkey:
-            log_fn("  Decrypting via Lit Protocol...")
-            try:
-                from core.marketplace.lit_encrypt import decrypt_private_key
-                privkey = decrypt_private_key(encrypted_json, buyer_kp=buyer_kp)
-                log_fn("  Decryption succeeded")
-            except Exception as e:
-                log_fn(f"  Decryption failed: {e}")
-                privkey = f"(decryption unavailable: {str(e)[:60]})"
+            log_fn("  Decrypting via Lit Protocol (TEE verifies burn on-chain)...")
+            from core.marketplace.lit_encrypt import decrypt_private_key
+            privkey = decrypt_private_key(
+                encrypted_json, buyer_kp=buyer_kp, mint_address=mint_address
+            )
+            log_fn("  Decryption succeeded")
 
-        out_dir = Path("decrypted_keys")
-        out_dir.mkdir(exist_ok=True)
-        out_file = out_dir / f"{vanity_address}.txt"
-        lines = [
-            f"Vanity Address: {vanity_address}",
-            f"Private Key: {privkey}",
-            f"NFT Mint: {mint_address}",
-            f"Burn TX: {burn_sig}",
-        ]
-        out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        log_fn(f"  Key saved to {out_file}")
+        out_file = ""
+        if not skip_file_save:
+            out_dir = Path("decrypted_keys")
+            out_dir.mkdir(exist_ok=True)
+            out_file = out_dir / f"{vanity_address}.txt"
+            lines = [
+                f"Vanity Address: {vanity_address}",
+                f"Private Key: {privkey}",
+                f"NFT Mint: {mint_address}",
+                f"Burn TX: {burn_sig}",
+            ]
+            out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            log_fn(f"  Key saved to {out_file}")
 
         log_fn("=== BURN & DECRYPT COMPLETE ===")
         return {
@@ -451,6 +524,13 @@ def relist_nft(owner_key, mint_address, vanity_address, new_price_sol=0,
             encrypted_json=existing_pkg,
         )
         log_fn(f"  Relist uploaded: {result.get('signature', '')[:40]}...")
+
+        from core.marketplace.solana_client import get_pda
+        from core.marketplace.nft import transfer_nft
+        pda = get_pda(vanity_pubkey)
+        log_fn(f"  Transferring NFT to PDA {str(pda)[:12]}...")
+        transfer_nft(owner_kp, pda, mint_address)
+        log_fn(f"  NFT transferred to PDA escrow")
 
         log_fn("=== RELIST COMPLETE ===")
         return {
@@ -605,6 +685,14 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
             mp_fn(f"  Step 5/7: NFT minted OK: {mint_address}")
             mp_fn(f"    Mint cost: {mint_cost_sol:.6f} SOL ({mint_cost_lamports} lamports)")
             mp_fn(f"    Explorer: https://explorer.solana.com/address/{mint_address}?cluster=devnet")
+
+            from core.marketplace.nft import transfer_nft
+            from core.marketplace.solana_client import get_pda
+            vanity_pub_for_pda = Pubkey.from_string(pubkey)
+            pda = get_pda(vanity_pub_for_pda)
+            mp_fn(f"    Transferring NFT to PDA {str(pda)[:12]}...")
+            transfer_nft(seller_kp, pda, mint_address)
+            mp_fn(f"    NFT transferred to PDA escrow")
         except Exception as e:
             log_fn(f"MINT FAILED: {e}")
             mp_fn(f"  FATAL: NFT mint failed: {e}")

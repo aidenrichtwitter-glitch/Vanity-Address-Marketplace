@@ -18,13 +18,14 @@
     </div>
 
     <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('miner')">Word Miner</button>
-        <button class="tab-btn" onclick="switchTab('marketplace')">Marketplace</button>
+        {% if show_miner %}<button class="tab-btn" onclick="switchTab('miner')">Word Miner</button>{% endif %}
+        <button class="tab-btn active" onclick="switchTab('marketplace')">Marketplace</button>
         <button class="tab-btn" onclick="switchTab('settings')">Settings</button>
     </div>
 
+    {% if show_miner %}
     <!-- WORD MINER TAB -->
-    <div id="tab-miner" class="tab-content active">
+    <div id="tab-miner" class="tab-content">
         <button class="settings-toggle" id="settingsToggle" onclick="toggleSettings()">&#9660; Mining Settings</button>
         <div class="settings-content" id="settingsContent">
             <div class="row">
@@ -132,9 +133,10 @@
             <div class="log-box" id="miningLog"></div>
         </div>
     </div>
+    {% endif %}
 
     <!-- MARKETPLACE TAB -->
-    <div id="tab-marketplace" class="tab-content">
+    <div id="tab-marketplace" class="tab-content active">
         <p class="marketplace-info">
             Browse vanity key NFTs. Buy &amp; Burn an NFT to decrypt the private key.
             Hold an NFT to resell it - burning is permanent and saves the key locally.
@@ -189,9 +191,10 @@
                 <button class="btn btn-burn" id="burnBtn" disabled onclick="burnNft()">Burn &amp; Decrypt</button>
                 <span class="decrypt-status" id="decryptStatus"></span>
             </div>
-            <div class="result-row">
-                <label>Saved To:</label>
-                <input type="text" id="savedTo" readonly placeholder="Burn an NFT to decrypt - key will be saved to decrypted_keys/">
+            <div class="result-row" id="decryptedKeyRow" style="display:none;">
+                <label>Decrypted:</label>
+                <span id="decryptedKeyInfo" style="flex:1; font-size:11px; color:#50e050;"></span>
+                <button class="btn btn-search" id="saveAgainBtn" onclick="redownloadKey()" style="flex-shrink:0; padding:4px 12px;">Save File Again</button>
             </div>
         </div>
 
@@ -227,17 +230,17 @@
         </p>
 
         <div class="group-box">
-            <div class="group-box-title">Lit Protocol API Key</div>
+            <div class="group-box-title">Lit Protocol Usage Key</div>
             <p style="color:#7878a0; font-size:10px; margin:0 0 8px 0;">
-                Required for Blind Mode encryption. Create a free account at the Lit Protocol dashboard to get your own key.
+                Required for Blind Mode encryption. Click below to generate your personal usage key from the shared marketplace account.
             </p>
-            <div class="inline-row" style="margin-bottom:8px">
-                <input type="password" id="settingsLitKey" placeholder="Enter your Lit Protocol API key" style="flex:1">
-                <button class="btn btn-secondary" onclick="toggleVisibility('settingsLitKey')" style="flex-shrink:0">Show</button>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center;">
-                <button class="btn btn-search" onclick="createLitAccount()" style="background:#2a6e9e; border-color:#4a9ade;">Create Free API Key</button>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+                <button class="btn btn-search" onclick="createLitAccount()" style="background:#2a6e9e; border-color:#4a9ade;">Generate Usage Key</button>
                 <span id="litKeyStatus" style="font-size:10px; color:#7878a0;"></span>
+            </div>
+            <div class="inline-row">
+                <input type="password" id="settingsLitKey" placeholder="Your usage key will appear here" style="flex:1" readonly>
+                <button class="btn btn-secondary" onclick="toggleVisibility('settingsLitKey')" style="flex-shrink:0">Show</button>
             </div>
         </div>
 
@@ -272,11 +275,13 @@ let startTime = null;
 let elapsedTimer = null;
 
 function switchTab(tab) {
-    const tabs = ['miner', 'marketplace', 'settings'];
-    document.querySelectorAll('.tab-btn').forEach((b, i) => {
-        b.classList.toggle('active', tabs[i] === tab);
+    const allTabs = ['miner', 'marketplace', 'settings'];
+    const btns = document.querySelectorAll('.tab-btn');
+    btns.forEach(b => {
+        const t = b.textContent.trim().toLowerCase().replace('word ', '');
+        b.classList.toggle('active', t === tab);
     });
-    tabs.forEach(t => {
+    allTabs.forEach(t => {
         const el = document.getElementById('tab-' + t);
         if (el) el.classList.toggle('active', t === tab);
     });
@@ -705,10 +710,11 @@ function burnOwned(mintAddress, vanityAddress, btnEl) {
             btnEl.disabled = false;
             btnEl.textContent = 'Burn & Decrypt';
         } else {
-            statusEl.textContent = 'Key decrypted and saved!';
-            document.getElementById('savedTo').value = d.saved_to || '';
+            statusEl.textContent = 'Key decrypted!';
             btnEl.textContent = 'Burned';
             btnEl.parentElement.closest('tr').style.opacity = '0.4';
+            showDecryptedRow(d.vanity_address || vanityAddress, d.privkey, mintAddress, d.burn_sig);
+            downloadKeyFile(d.vanity_address || vanityAddress, d.privkey, mintAddress, d.burn_sig);
         }
     })
     .catch(e => {
@@ -961,6 +967,66 @@ function buyNft() {
     });
 }
 
+var _lastDecryptedData = null;
+
+function showDecryptedRow(vanityAddress, privkey, mintAddress, burnSig) {
+    _lastDecryptedData = { vanityAddress, privkey, mintAddress, burnSig };
+    const row = document.getElementById('decryptedKeyRow');
+    const info = document.getElementById('decryptedKeyInfo');
+    if (row && info) {
+        info.textContent = vanityAddress + ' — key saved to file';
+        row.style.display = '';
+    }
+}
+
+async function redownloadKey() {
+    if (!_lastDecryptedData) return;
+    await downloadKeyFile(_lastDecryptedData.vanityAddress, _lastDecryptedData.privkey, _lastDecryptedData.mintAddress, _lastDecryptedData.burnSig);
+}
+
+function _isMobile() {
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+async function downloadKeyFile(vanityAddress, privkey, mintAddress, burnSig) {
+    const content = `Vanity Address: ${vanityAddress}\nPrivate Key: ${privkey}\nNFT Mint: ${mintAddress}\nBurn TX: ${burnSig}\n`;
+    const fileName = `${vanityAddress}.txt`;
+
+    if (!_isMobile() && window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: fileName,
+                types: [{
+                    description: 'Text File',
+                    accept: { 'text/plain': ['.txt'] },
+                }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            return;
+        } catch (e) {
+            if (e.name === 'AbortError') return;
+        }
+    }
+
+    if (_isMobile()) {
+        const file = new File([content], fileName, { type: 'text/plain' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            try { await navigator.share({ files: [file], title: fileName }); return; } catch (e) {}
+        }
+    }
+
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 function burnNft() {
     const pkg = _getSelectedPkg();
     if (!pkg) return;
@@ -1005,12 +1071,12 @@ function burnNft() {
             return;
         }
 
-        decryptStatus.textContent = 'NFT burned — key decrypted and saved!';
+        decryptStatus.textContent = 'NFT burned — key decrypted!';
         decryptStatus.style.color = '#50e050';
-        document.getElementById('savedTo').value = d.file;
         appendLog('mpLog', `Burned NFT and decrypted key for: ${d.vanity_address}`);
         appendLog('mpLog', `  Burn TX: ${d.burn_sig}`);
-        appendLog('mpLog', `  Key saved to: ${d.file}`);
+        showDecryptedRow(d.vanity_address, d.privkey, mintAddress, d.burn_sig);
+        downloadKeyFile(d.vanity_address, d.privkey, mintAddress, d.burn_sig);
 
         packagesData[selectedPackageIdx].nft_status = 'BURNED';
         const rows = document.querySelectorAll('#packagesTable tr');
@@ -1107,7 +1173,7 @@ function createLitAccount() {
     const btn = document.querySelector('[onclick="createLitAccount()"]');
     const status = document.getElementById('litKeyStatus');
     btn.disabled = true;
-    btn.textContent = 'Creating...';
+    btn.textContent = 'Generating...';
     status.textContent = 'Contacting Lit Protocol TEE...';
     status.style.color = '#6ea8fe';
 
@@ -1115,14 +1181,13 @@ function createLitAccount() {
         .then(r => r.json())
         .then(d => {
             btn.disabled = false;
-            btn.textContent = 'Create Free API Key';
+            btn.textContent = 'Generate Usage Key';
             if (d.ok) {
-                status.textContent = 'API key created and saved! (' + d.api_key_masked + ')';
+                status.textContent = 'Usage key ready! (' + d.usage_key_masked + ')';
                 status.style.color = '#50e050';
-                document.getElementById('settingsLitKey').placeholder = 'Key set: ' + d.api_key_masked + ' (enter new value to change)';
-                document.getElementById('settingsLitKey').value = '';
+                document.getElementById('settingsLitKey').value = d.usage_key_masked;
                 const ss = document.getElementById('settingsStatus');
-                ss.textContent = 'New Lit API key created and saved to profile.';
+                ss.textContent = 'Usage key generated and saved to profile.';
                 ss.style.color = '#50e050';
             } else {
                 status.textContent = 'Failed: ' + (d.error || 'unknown error');
@@ -1131,7 +1196,7 @@ function createLitAccount() {
         })
         .catch(e => {
             btn.disabled = false;
-            btn.textContent = 'Create Free API Key';
+            btn.textContent = 'Generate Usage Key';
             status.textContent = 'Failed: ' + e;
             status.style.color = '#e05050';
         });
@@ -1143,13 +1208,14 @@ function loadSettingsProfile() {
         .then(d => {
             const litInput = document.getElementById('settingsLitKey');
             const litStatus = document.getElementById('litKeyStatus');
-            if (d.lit_key_present) {
-                litInput.placeholder = 'Key set: ' + d.lit_key_masked + ' (enter new value to change)';
-                litStatus.textContent = 'API key is configured';
+            if (d.usage_key_present) {
+                litInput.value = d.usage_key_masked;
+                litStatus.textContent = 'Usage key is configured';
                 litStatus.style.color = '#50e050';
             } else {
-                litInput.placeholder = 'Enter your Lit Protocol API key';
-                litStatus.textContent = 'No personal API key set (using shared default)';
+                litInput.value = '';
+                litInput.placeholder = 'Click "Generate Usage Key" to get started';
+                litStatus.textContent = 'No usage key yet';
                 litStatus.style.color = '#e0a050';
             }
             const sellerInput = document.getElementById('settingsSellerKey');
@@ -1161,12 +1227,11 @@ function loadSettingsProfile() {
 }
 
 function saveSettingsProfile() {
-    const litKey = document.getElementById('settingsLitKey').value.trim();
     const sellerKey = document.getElementById('settingsSellerKey').value.trim();
     fetch('/api/settings/save', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({lit_key: litKey, seller_key: sellerKey, persist: true})
+        body: JSON.stringify({seller_key: sellerKey, persist: true})
     })
     .then(r => r.json())
     .then(d => {
@@ -1174,8 +1239,6 @@ function saveSettingsProfile() {
         if (d.ok) {
             el.textContent = 'Profile saved and applied to current session.';
             el.style.color = '#50e050';
-            document.getElementById('litKeyStatus').textContent = 'Saved to profile';
-            document.getElementById('litKeyStatus').style.color = '#50e050';
         } else {
             el.textContent = 'Save failed: ' + (d.error || 'unknown');
             el.style.color = '#e05050';
@@ -1188,12 +1251,11 @@ function saveSettingsProfile() {
 }
 
 function applySettings() {
-    const litKey = document.getElementById('settingsLitKey').value.trim();
     const sellerKey = document.getElementById('settingsSellerKey').value.trim();
     fetch('/api/settings/save', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({lit_key: litKey, seller_key: sellerKey, persist: false})
+        body: JSON.stringify({seller_key: sellerKey, persist: false})
     })
     .then(r => r.json())
     .then(d => {
@@ -1226,6 +1288,7 @@ function clearSettingsProfile() {
         .catch(() => {});
 }
 
+{% if show_miner %}
 fetch('/api/status')
     .then(r => r.json())
     .then(d => {
@@ -1240,6 +1303,10 @@ fetch('/api/status')
         document.getElementById('statusLabel').textContent = d.status;
     })
     .catch(() => {});
+{% endif %}
+
+searchPackages();
+loadBounties();
 </script>
 </body>
 </html>

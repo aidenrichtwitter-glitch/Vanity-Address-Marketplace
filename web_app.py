@@ -14,7 +14,7 @@ if _profile_path.exists():
     try:
         import json as _json_init
         _profile_data = _json_init.loads(_profile_path.read_text(encoding="utf-8"))
-        for _k in ("LIT_API_KEY", "SOLANA_DEVNET_PRIVKEY"):
+        for _k in ("SOLANA_DEVNET_PRIVKEY", "LIT_PKP_PUBLIC_KEY", "LIT_GROUP_ID", "LIT_USAGE_API_KEY"):
             _v = _profile_data.get(_k, "").strip()
             if _v and _k not in os.environ:
                 os.environ[_k] = _v
@@ -37,6 +37,9 @@ logging.basicConfig(
 )
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SESSION_SECRET", os.urandom(32).hex())
+
+IS_PRODUCTION = bool(os.environ.get("REPLIT_DEPLOYMENT"))
 
 event_queues = []
 event_queues_lock = threading.Lock()
@@ -406,6 +409,8 @@ def gpu_temp_monitor():
 
 @app.route("/api/upload-wordlist", methods=["POST"])
 def api_upload_wordlist():
+    if IS_PRODUCTION:
+        return jsonify({"error": "Mining is disabled on the hosted version."}), 403
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
     f = request.files["file"]
@@ -421,7 +426,7 @@ def api_upload_wordlist():
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", show_miner=not IS_PRODUCTION)
 
 
 @app.route("/api/status")
@@ -454,6 +459,8 @@ def _parse_wordlist_input(raw):
 
 @app.route("/api/wordcount", methods=["POST"])
 def api_wordcount():
+    if IS_PRODUCTION:
+        return jsonify({"error": "Mining is disabled on the hosted version."}), 403
     data = request.json or {}
     min_length = data.get("min_length", 4)
     raw_wordlist = data.get("wordlist_file", "") or ""
@@ -478,6 +485,8 @@ def api_wordcount():
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
+    if IS_PRODUCTION:
+        return jsonify({"error": "Mining is disabled on the hosted version. Download the source to mine locally."}), 403
     global _stop_event
     with mining_lock:
         if mining_state["running"]:
@@ -579,6 +588,8 @@ def api_start():
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    if IS_PRODUCTION:
+        return jsonify({"error": "Mining is disabled on the hosted version."}), 403
     global _stop_event
     if _stop_event:
         _stop_event.set()
@@ -675,6 +686,7 @@ def api_marketplace_burn():
     result, err = shared.burn_and_decrypt(
         buyer_key, encrypted_json, mint_address, vanity_address,
         log_fn=lambda msg: burn_log.info(msg),
+        skip_file_save=True,
     )
     if err:
         return jsonify({"error": err}), 400
@@ -766,11 +778,11 @@ def _mask_key(key: str) -> str:
 
 @app.route("/api/settings/load")
 def api_settings_load():
-    lit_raw = os.environ.get("LIT_API_KEY", "")
+    usage_raw = os.environ.get("LIT_USAGE_API_KEY", "")
     seller_raw = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
     return jsonify({
-        "lit_key_masked": _mask_key(lit_raw),
-        "lit_key_present": bool(lit_raw),
+        "usage_key_masked": _mask_key(usage_raw),
+        "usage_key_present": bool(usage_raw),
         "seller_key_masked": _mask_key(seller_raw),
         "seller_key_present": bool(seller_raw),
     })
@@ -779,21 +791,20 @@ def api_settings_load():
 @app.route("/api/settings/save", methods=["POST"])
 def api_settings_save():
     data = request.json or {}
-    lit_key = data.get("lit_key", "").strip()
     seller_key = data.get("seller_key", "").strip()
     persist = data.get("persist", False)
 
-    if lit_key:
-        os.environ["LIT_API_KEY"] = lit_key
     if seller_key:
         os.environ["SOLANA_DEVNET_PRIVKEY"] = seller_key
 
     if persist:
         profile = {}
-        if lit_key:
-            profile["LIT_API_KEY"] = lit_key
         if seller_key:
             profile["SOLANA_DEVNET_PRIVKEY"] = seller_key
+        for env_key in ("LIT_PKP_PUBLIC_KEY", "LIT_GROUP_ID", "LIT_USAGE_API_KEY"):
+            val = os.environ.get(env_key, "").strip()
+            if val:
+                profile[env_key] = val
         try:
             _save_web_profile(profile)
         except Exception as e:
@@ -805,19 +816,39 @@ def api_settings_save():
 @app.route("/api/settings/create-lit-key", methods=["POST"])
 def api_create_lit_key():
     try:
-        from core.marketplace.lit_encrypt import create_lit_account
-        result = create_lit_account()
-        api_key = result["api_key"]
-        os.environ["LIT_API_KEY"] = api_key
+        from core.marketplace.lit_encrypt import (
+            _get_api_key, _get_pkp_public_key,
+            register_ipfs_actions, create_user_scoped_key,
+        )
+
+        api_key = _get_api_key()
+        pkp_public_key = _get_pkp_public_key()
+        setup_steps = ["pkp"]
+
+        if not os.environ.get("LIT_GROUP_ID", "").strip():
+            try:
+                register_ipfs_actions()
+                setup_steps.append("group")
+            except Exception:
+                pass
+
+        scoped_key = create_user_scoped_key()
+        os.environ["LIT_USAGE_API_KEY"] = scoped_key
+        setup_steps.append("usage_key")
 
         profile = _load_web_profile()
-        profile["LIT_API_KEY"] = api_key
+        profile["LIT_PKP_PUBLIC_KEY"] = pkp_public_key
+        group_id = os.environ.get("LIT_GROUP_ID", "").strip()
+        if group_id:
+            profile["LIT_GROUP_ID"] = group_id
+        profile["LIT_USAGE_API_KEY"] = scoped_key
         _save_web_profile(profile)
 
         return jsonify({
             "ok": True,
-            "api_key_masked": _mask_key(api_key),
-            "wallet_address": result.get("wallet_address", ""),
+            "usage_key_masked": _mask_key(scoped_key),
+            "has_scoped_key": True,
+            "setup_steps": setup_steps,
         })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500

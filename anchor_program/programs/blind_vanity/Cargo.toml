@@ -1,6 +1,6 @@
 [package]
 name = "blind-vanity"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 [lib]
@@ -13,4 +13,3 @@ default = []
 
 [dependencies]
 solana-program = "1.18"
-borsh = "0.10"
