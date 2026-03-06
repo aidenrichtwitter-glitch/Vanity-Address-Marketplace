@@ -244,8 +244,8 @@ def test_backend_blind_upload_signature():
         return True
 
     sig = inspect.signature(blind_upload)
-    assert "session_blob" in sig.parameters, "blind_upload missing session_blob param"
-    print(f"  blind_upload signature includes session_blob: YES")
+    assert "buyer_pubkey" in sig.parameters, "blind_upload missing buyer_pubkey param"
+    print(f"  blind_upload signature includes buyer_pubkey: YES")
     return True
 
 

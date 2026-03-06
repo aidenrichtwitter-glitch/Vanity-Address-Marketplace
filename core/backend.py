@@ -22,6 +22,10 @@ _upload_lock = threading.Lock()
 
 _trusted_lit_hash_cache = None
 
+_search_cache_lock = threading.Lock()
+_search_cache = {"packages": [], "timestamp": 0}
+_SEARCH_CACHE_TTL = 30
+
 
 def _get_trusted_lit_hashes():
     global _trusted_lit_hash_cache
@@ -72,8 +76,14 @@ def save_bounties(bounties):
     BOUNTIES_FILE.write_text(json.dumps(bounties, indent=2))
 
 
-def create_bounty(word, reward_sol, buyer_address, notes=""):
-    word = word.strip().lower()
+def create_bounty(word, reward_sol, buyer_address, notes="",
+                   pattern_type="ends_with", case_insensitive=True,
+                   description=""):
+    word = word.strip()
+    if not case_insensitive:
+        pass
+    else:
+        word = word.lower()
     if not word:
         return None, "Word is required"
     reward_sol = float(reward_sol)
@@ -82,6 +92,8 @@ def create_bounty(word, reward_sol, buyer_address, notes=""):
     buyer_address = buyer_address.strip()
     if not buyer_address:
         return None, "Buyer wallet address is required"
+    if pattern_type not in ("ends_with", "starts_with", "contains"):
+        pattern_type = "ends_with"
 
     bounty = {
         "id": int(time.time() * 1000),
@@ -90,6 +102,9 @@ def create_bounty(word, reward_sol, buyer_address, notes=""):
         "reward_lamports": int(reward_sol * 1_000_000_000),
         "buyer_address": buyer_address,
         "notes": notes.strip(),
+        "pattern_type": pattern_type,
+        "case_insensitive": bool(case_insensitive),
+        "description": description.strip() if description else "",
         "status": "open",
         "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -115,7 +130,7 @@ def fulfill_bounty(bounty_id, vanity_address, mint_address):
             break
     if not bounty:
         return None, "Bounty not found"
-    if bounty.get("status") != "open":
+    if bounty.get("status") not in ("open", "claimed"):
         return None, "Bounty is no longer open"
 
     bounty["status"] = "fulfilled"
@@ -124,6 +139,20 @@ def fulfill_bounty(bounty_id, vanity_address, mint_address):
     bounty["fulfilled_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
     save_bounties(bounties)
     return bounty, None
+
+
+def get_bounty_wordlist():
+    bounties = load_bounties()
+    open_bounties = [b for b in bounties if b.get("status") in ("open", "claimed")]
+    return [
+        {
+            "word": b.get("word", ""),
+            "bounty_id": b.get("id"),
+            "pattern_type": b.get("pattern_type", "ends_with"),
+            "reward_sol": b.get("reward_sol", 0),
+        }
+        for b in open_bounties
+    ]
 
 
 def _enrich_packages(packages):
@@ -212,28 +241,56 @@ def _enrich_packages(packages):
     return packages
 
 
-def search_packages(search_filter=""):
+def _fetch_and_enrich():
     from core.marketplace.solana_client import fetch_all_packages
 
     packages = fetch_all_packages()
     packages = _enrich_packages(packages)
 
-    packages = [
+    active = [
         p for p in packages
         if p.get("nft_status") == "ACTIVE"
         and p.get("verified") == "TEE Verified"
         and p.get("in_escrow") == True
+        and p.get("encrypted_json", {}).get("pkpPublicKey")
     ]
+    return active
+
+
+def search_packages(search_filter=""):
+    global _search_cache
+
+    now = time.time()
+    cache_valid = (now - _search_cache["timestamp"]) < _SEARCH_CACHE_TTL and _search_cache["packages"]
+
+    if not cache_valid:
+        try:
+            active = _fetch_and_enrich()
+            if active:
+                with _search_cache_lock:
+                    _search_cache = {"packages": active, "timestamp": now}
+            elif _search_cache["packages"]:
+                log.warning("[search_packages] RPC returned 0 active packages, serving cached results (%d packages)", len(_search_cache["packages"]))
+                active = _search_cache["packages"]
+        except Exception as e:
+            log.error("[search_packages] Fetch failed: %s", e)
+            if _search_cache["packages"]:
+                log.warning("[search_packages] Serving cached results (%d packages)", len(_search_cache["packages"]))
+                active = _search_cache["packages"]
+            else:
+                raise
+    else:
+        active = _search_cache["packages"]
 
     search_filter = (search_filter or "").strip().lower()
     if search_filter:
-        packages = [
-            p for p in packages
+        active = [
+            p for p in active
             if search_filter in p.get("vanity_address", "").lower()
             or search_filter in (p.get("encrypted_json", {}).get("vanityWord", "")).lower()
         ]
 
-    return packages
+    return active
 
 
 def get_owned_nfts(buyer_key, log_fn=None):
@@ -420,6 +477,12 @@ def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
         log_fn("  Waiting for burn confirmation to propagate...")
         _time.sleep(4)
 
+        import base58 as b58_mod
+
+        is_legacy_split_key = encrypted_json.get("splitKeyV3", False) or encrypted_json.get("splitKeyV2", False)
+        if is_legacy_split_key:
+            log_fn("  WARNING: This is a legacy split-key package. The resulting key may NOT be Phantom-importable.")
+
         privkey = encrypted_json.get("privateKey", "")
         if not privkey:
             log_fn("  Decrypting via Lit Protocol (TEE verifies burn on-chain)...")
@@ -428,6 +491,14 @@ def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
                 encrypted_json, buyer_kp=buyer_kp, mint_address=mint_address
             )
             log_fn("  Decryption succeeded")
+
+        key_bytes = b58_mod.b58decode(privkey)
+        if len(key_bytes) == 64:
+            derived_pubkey = b58_mod.b58encode(key_bytes[32:]).decode()
+            if derived_pubkey != vanity_address:
+                log_fn(f"  WARNING: Decrypted pubkey {derived_pubkey} != expected {vanity_address}")
+            else:
+                log_fn(f"  Key verified: pubkey matches vanity address {vanity_address}")
 
         out_file = ""
         if not skip_file_save:
@@ -439,6 +510,11 @@ def burn_and_decrypt(buyer_key, encrypted_json, mint_address, vanity_address,
                 f"Private Key: {privkey}",
                 f"NFT Mint: {mint_address}",
                 f"Burn TX: {burn_sig}",
+                f"",
+                f"To import into Phantom:",
+                f"  1. Copy the Private Key above",
+                f"  2. Open Phantom -> Settings -> Add Wallet -> Import Private Key",
+                f"  3. Paste the key and confirm",
             ]
             out_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
             log_fn(f"  Key saved to {out_file}")
@@ -550,8 +626,7 @@ def relist_nft(owner_key, mint_address, vanity_address, new_price_sol=0,
 
 
 def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
-                 log_fn=None, mp_fn=None, on_success=None, on_error=None,
-                 session_blob=None):
+                 log_fn=None, mp_fn=None, on_success=None, on_error=None):
     if log_fn is None:
         log_fn = lambda msg: log.info(f"[Blind] {msg}")
     if mp_fn is None:
@@ -559,14 +634,11 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
 
     word_label = f" ({vanity_word})" if vanity_word else ""
     price_display = f"{float(price_sol):.4f} SOL" if price_sol and float(price_sol) > 0 else "Free"
-    is_split_key = session_blob is not None
 
     log_fn(f"=== BLIND UPLOAD START for {pubkey[:16]}...{word_label} ===")
     mp_fn(f"--- Upload started for {pubkey}{word_label} ---")
     mp_fn(f"  Price setting: {price_display}")
     mp_fn(f"  Wallet: {wallet[:8]}...({len(wallet)} chars)")
-    if is_split_key:
-        mp_fn(f"  Protocol: Split-key (oblivious mining)")
 
     def _upload():
         with _upload_lock:
@@ -576,11 +648,10 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
         try:
             mp_fn("  Step 1/7: Importing modules...")
             import base58 as b58_mod
-            import hashlib as _hashlib
             from nacl.signing import SigningKey
             from core.marketplace.solana_client import load_seller_keypair, upload_package
             from core.marketplace.nft import mint_nft
-            from core.marketplace.lit_encrypt import encrypt_private_key, split_key_encrypt
+            from core.marketplace.lit_encrypt import encrypt_private_key
             from solders.pubkey import Pubkey
             mp_fn("  Step 1/7: Imports OK")
         except Exception as e:
@@ -605,76 +676,37 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 on_error(str(e), pubkey)
             return
 
-        if is_split_key:
-            try:
-                mp_fn("  Step 3/7: Deriving miner scalar from seed (split-key)...")
-                seed_hash = _hashlib.sha512(pv_bytes).digest()
-                miner_scalar = bytearray(seed_hash[:32])
-                miner_scalar[0] &= 248
-                miner_scalar[31] &= 63
-                miner_scalar[31] |= 64
-                mp_fn(f"  Step 3/7: Miner scalar derived (full key never materializes)")
-            except Exception as e:
-                log_fn(f"SCALAR DERIVATION FAILED: {e}")
-                mp_fn(f"  FATAL: Failed to derive miner scalar: {e}")
-                mp_fn(f"  Traceback: {_tb.format_exc()}")
-                if on_error:
-                    on_error(str(e), pubkey)
-                return
+        try:
+            mp_fn("  Step 3/7: Encoding private key...")
+            sk = SigningKey(pv_bytes)
+            pb_bytes = bytes(sk.verify_key)
+            privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
+            mp_fn(f"  Step 3/7: Private key encoded ({len(privkey_b58)} chars)")
+        except Exception as e:
+            log_fn(f"KEY ENCODING FAILED: {e}")
+            mp_fn(f"  FATAL: Failed to encode private key: {e}")
+            mp_fn(f"  Traceback: {_tb.format_exc()}")
+            if on_error:
+                on_error(str(e), pubkey)
+            return
 
-            try:
-                mp_fn("  Step 4/7: Split-key encrypt in TEE (key combined + encrypted inside TEE)...")
-                mp_fn("    Sending miner scalar to TEE for combination with TEE scalar...")
-                mp_fn("    Full private key will ONLY exist inside TEE")
-                encrypted = split_key_encrypt(
-                    bytes(miner_scalar), session_blob, pubkey, seller_kp=seller_kp
-                )
-                mp_fn("  Step 4/7: Split-key encryption SUCCEEDED")
-                mp_fn(f"    splitKey: True")
-                mp_fn(f"    encryptedInTEE: True")
-                mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
-                mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
-            except Exception as e:
-                log_fn(f"ABORT: Split-key encryption failed: {e}")
-                mp_fn(f"  ABORT: Split-key encryption failed: {e}")
-                mp_fn(f"  The full private key was NEVER assembled on this machine.")
-                mp_fn(f"  Traceback: {_tb.format_exc()}")
-                if on_error:
-                    on_error(f"Split-key encryption failed — upload aborted (key never exposed): {e}", pubkey)
-                return
-        else:
-            try:
-                mp_fn("  Step 3/7: Encoding private key...")
-                sk = SigningKey(pv_bytes)
-                pb_bytes = bytes(sk.verify_key)
-                privkey_b58 = b58_mod.b58encode(pv_bytes + pb_bytes).decode("utf-8")
-                mp_fn(f"  Step 3/7: Private key encoded ({len(privkey_b58)} chars)")
-            except Exception as e:
-                log_fn(f"KEY ENCODING FAILED: {e}")
-                mp_fn(f"  FATAL: Failed to encode private key: {e}")
-                mp_fn(f"  Traceback: {_tb.format_exc()}")
-                if on_error:
-                    on_error(str(e), pubkey)
-                return
-
-            try:
-                mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
-                mp_fn("    Connecting to Lit datil network...")
-                encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
-                mp_fn("  Step 4/7: Lit encryption SUCCEEDED (direct encrypt, real authSig)")
-                mp_fn(f"    encryptedInTEE: True")
-                mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
-                mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
-                mp_fn(f"    conditions: solRpcConditions (getBalance > 0)")
-            except Exception as e:
-                log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
-                mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
-                mp_fn(f"  The private key will NOT be uploaded in plaintext.")
-                mp_fn(f"  Lit Protocol must be reachable for blind uploads to work securely.")
-                mp_fn(f"  Traceback: {_tb.format_exc()}")
-                if on_error:
-                    on_error(f"Lit encryption failed — upload aborted (key not exposed): {e}", pubkey)
-                return
+        try:
+            mp_fn("  Step 4/7: Encrypting private key with Lit Protocol (TEE)...")
+            mp_fn("    Connecting to Lit datil network...")
+            encrypted = encrypt_private_key(privkey_b58, pubkey, seller_kp=seller_kp)
+            mp_fn("  Step 4/7: Lit encryption SUCCEEDED")
+            mp_fn(f"    encryptedInTEE: True")
+            mp_fn(f"    litActionHash: {encrypted.get('litActionHash', '')[:16]}...")
+            mp_fn(f"    ciphertext length: {len(encrypted.get('ciphertext', ''))}")
+        except Exception as e:
+            log_fn(f"ABORT: Lit Protocol encryption failed — cannot upload without encryption: {e}")
+            mp_fn(f"  ABORT: Lit Protocol encryption failed: {e}")
+            mp_fn(f"  The private key will NOT be uploaded in plaintext.")
+            mp_fn(f"  Lit Protocol must be reachable for blind uploads to work securely.")
+            mp_fn(f"  Traceback: {_tb.format_exc()}")
+            if on_error:
+                on_error(f"Lit encryption failed — upload aborted (key not exposed): {e}", pubkey)
+            return
 
         try:
             mp_fn("  Step 5/7: Minting NFT on devnet...")
@@ -715,9 +747,7 @@ def blind_upload(pv_bytes, pubkey, wallet, vanity_word="", price_sol=0,
                 "sellerAddress": seller_pubkey,
                 "encryptedInTEE": True,
             }
-            if is_split_key:
-                package_json["splitKey"] = True
-            for extra_key in ("iv", "wrappedKey", "wrapIv", "litNetwork"):
+            for extra_key in ("iv", "wrappedKey", "wrapIv", "litNetwork", "pkpPublicKey"):
                 if extra_key in encrypted:
                     package_json[extra_key] = encrypted[extra_key]
             if vanity_word:

@@ -64,6 +64,7 @@ from PySide6.QtWidgets import (
     QLabel, QPushButton, QSpinBox, QDoubleSpinBox, QLineEdit, QTableWidget,
     QTableWidgetItem, QHeaderView, QGroupBox, QTextEdit,
     QFileDialog, QSplitter, QSlider, QFrame, QTabWidget, QCheckBox,
+    QComboBox, QDialog, QTextBrowser, QInputDialog,
 )
 from PySide6.QtCore import Qt, QTimer, Signal, QObject, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor
@@ -229,7 +230,7 @@ class ThreadBridgeSignals(QObject):
     log_signal = Signal(str)
     mp_log_signal = Signal(str)
     burn_status_signal = Signal(str)
-    burn_success_signal = Signal(str, str, str)
+    burn_success_signal = Signal(str, str, str, bool)
     burn_error_signal = Signal(str)
     buy_success_signal = Signal(dict)
     buy_error_signal = Signal(str)
@@ -246,7 +247,7 @@ class ThreadBridgeSignals(QObject):
 class MiningThread(threading.Thread):
     def __init__(self, signals, word_filter, suffix_patterns, output_dir,
                  count, iteration_bits, power_pct=100, max_temp=80,
-                 mining_mode="mine", tee_point=None):
+                 mining_mode="mine"):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
@@ -257,7 +258,6 @@ class MiningThread(threading.Thread):
         self.power_pct = power_pct
         self.max_temp = max_temp
         self.mining_mode = mining_mode
-        self.tee_point = tee_point
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -315,8 +315,6 @@ class MiningThread(threading.Thread):
                     "suffix_width": suffix_width,
                     "suffix_lengths": suffix_lengths,
                 }
-                if self.tee_point:
-                    worker_kwargs["tee_point"] = self.tee_point
                 proc = mp_ctx.Process(
                     target=_persistent_worker,
                     args=(idx, kernel_source, self.iteration_bits, gpu_counts, None, c_conn,
@@ -362,26 +360,7 @@ class MiningThread(threading.Thread):
                             output = msg["data"]
                             pv_bytes = bytes(output[1:33])
                             gpu_pubkey_bytes = bytes(output[33:65])
-                            if self.tee_point and any(b != 0 for b in gpu_pubkey_bytes):
-                                from base58 import b58encode
-                                pubkey = b58encode(gpu_pubkey_bytes).decode()
-                            elif self.tee_point:
-                                import hashlib
-                                from base58 import b58encode
-                                from nacl.bindings import (
-                                    crypto_scalarmult_ed25519_base_noclamp,
-                                    crypto_core_ed25519_add,
-                                )
-                                h = hashlib.sha512(pv_bytes).digest()
-                                scalar = bytearray(h[:32])
-                                scalar[0] &= 248
-                                scalar[31] &= 63
-                                scalar[31] |= 64
-                                miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
-                                combined_point = crypto_core_ed25519_add(miner_point, self.tee_point)
-                                pubkey = b58encode(combined_point).decode()
-                            else:
-                                pubkey = get_public_key_from_private_bytes(pv_bytes)
+                            pubkey = get_public_key_from_private_bytes(pv_bytes)
                             word, padding = self.word_filter.check_address(pubkey)
                             suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
                             if self.mining_mode != "blind":
@@ -424,15 +403,13 @@ class MiningThread(threading.Thread):
 
 
 class CpuMiningThread(threading.Thread):
-    def __init__(self, signals, word_filter, output_dir, count=0, mining_mode="mine",
-                 tee_point=None):
+    def __init__(self, signals, word_filter, output_dir, count=0, mining_mode="mine"):
         super().__init__(daemon=True)
         self.signals = signals
         self.word_filter = word_filter
         self.output_dir = output_dir
         self.count = count
         self.mining_mode = mining_mode
-        self.tee_point = tee_point
         self._stop_event = threading.Event()
 
     def stop(self):
@@ -445,16 +422,7 @@ class CpuMiningThread(threading.Thread):
             from nacl.signing import SigningKey
             from base58 import b58encode
 
-            use_split_key = self.tee_point is not None and len(self.tee_point) == 32 and any(b != 0 for b in self.tee_point)
-
-            if use_split_key:
-                from nacl.bindings import (
-                    crypto_scalarmult_ed25519_base_noclamp,
-                    crypto_core_ed25519_add,
-                )
-                self.signals.log.emit("CPU mining mode (split-key) — no GPU required")
-            else:
-                self.signals.log.emit("CPU mining mode — no GPU required")
+            self.signals.log.emit("CPU mining mode — no GPU required")
             self.signals.status.emit("Mining (CPU)...")
 
             Path(self.output_dir).mkdir(parents=True, exist_ok=True)
@@ -470,19 +438,9 @@ class CpuMiningThread(threading.Thread):
 
                 seed = secrets.token_bytes(32)
 
-                if use_split_key:
-                    h = _hl.sha512(seed).digest()
-                    scalar = bytearray(h[:32])
-                    scalar[0] &= 248
-                    scalar[31] &= 63
-                    scalar[31] |= 64
-                    miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
-                    combined_point = crypto_core_ed25519_add(miner_point, self.tee_point)
-                    pubkey = b58encode(combined_point).decode()
-                else:
-                    sk = SigningKey(seed)
-                    pk_bytes = bytes(sk.verify_key)
-                    pubkey = b58encode(pk_bytes).decode()
+                sk = SigningKey(seed)
+                pk_bytes = bytes(sk.verify_key)
+                pubkey = b58encode(pk_bytes).decode()
 
                 keys_checked += 1
 
@@ -973,13 +931,13 @@ class MainWindow(QMainWindow):
         price_row.addStretch()
         blind_wallet_layout.addLayout(price_row)
 
-        blind_info = QLabel(
-            "Blind Mode: Keys are uploaded to the Solana devnet marketplace with an NFT. "
-            "Buyers pay the listed price in SOL to your wallet, then burn the NFT to receive the key."
+        self.blind_info_label = QLabel(
+            "Mine vanity addresses. Keys are encrypted by TEE and listed as NFTs. "
+            "Buyers purchase, burn, and get a Phantom-importable private key."
         )
-        blind_info.setWordWrap(True)
-        blind_info.setStyleSheet("font-size: 10px; color: #c878c8; background: transparent; border: none; padding: 2px 0;")
-        blind_wallet_layout.addWidget(blind_info)
+        self.blind_info_label.setWordWrap(True)
+        self.blind_info_label.setStyleSheet("font-size: 10px; color: #c878c8; background: transparent; border: none; padding: 2px 0;")
+        blind_wallet_layout.addWidget(self.blind_info_label)
 
         self.blind_wallet_widget.setVisible(False)
         mode_layout.addWidget(self.blind_wallet_widget)
@@ -1298,33 +1256,56 @@ class MainWindow(QMainWindow):
 
         bounty_box = QGroupBox("Bounty Board")
         bounty_layout = QVBoxLayout(bounty_box)
-        bounty_layout.setSpacing(8)
+        bounty_layout.setSpacing(6)
 
-        bounty_info = QLabel("Post a bounty for a specific vanity word. Miners can see your request and fulfill it.")
+        bounty_header = QHBoxLayout()
+        bounty_info = QLabel("Post a wanted ad for a custom vanity address. Set your pattern and reward. Miners will fulfill it and list it on the marketplace.")
         bounty_info.setWordWrap(True)
         bounty_info.setStyleSheet("font-size: 11px; color: #9898b8; background: transparent; padding: 2px 0;")
-        bounty_layout.addWidget(bounty_info)
+        bounty_header.addWidget(bounty_info)
+        help_btn = QPushButton("? How It Works")
+        help_btn.setFixedWidth(110)
+        help_btn.setStyleSheet("font-size: 10px; padding: 3px 8px;")
+        help_btn.clicked.connect(self._show_help_dialog)
+        bounty_header.addWidget(help_btn)
+        bounty_layout.addLayout(bounty_header)
 
-        bounty_form = QHBoxLayout()
-        bounty_form.setSpacing(8)
-
+        bounty_row1 = QHBoxLayout()
+        bounty_row1.setSpacing(6)
+        self.bounty_pattern_combo = QComboBox()
+        self.bounty_pattern_combo.addItems(["Ends with", "Starts with", "Contains"])
+        self.bounty_pattern_combo.setFixedWidth(100)
+        bounty_row1.addWidget(self.bounty_pattern_combo)
         self.bounty_word_edit = QLineEdit()
-        self.bounty_word_edit.setPlaceholderText("Word you want (e.g. dragon)")
-        self.bounty_word_edit.setFixedWidth(180)
-        bounty_form.addWidget(self.bounty_word_edit)
-
+        self.bounty_word_edit.setPlaceholderText("Pattern (e.g. dragon)")
+        self.bounty_word_edit.setFixedWidth(160)
+        bounty_row1.addWidget(self.bounty_word_edit)
+        self.bounty_case_cb = QCheckBox("Ignore case")
+        self.bounty_case_cb.setChecked(True)
+        self.bounty_case_cb.setStyleSheet("font-size: 10px; color: #a0a0c0; background: transparent;")
+        bounty_row1.addWidget(self.bounty_case_cb)
         self.bounty_reward_edit = QLineEdit()
         self.bounty_reward_edit.setPlaceholderText("Reward SOL")
         self.bounty_reward_edit.setText("0.5")
-        self.bounty_reward_edit.setFixedWidth(100)
-        bounty_form.addWidget(self.bounty_reward_edit)
+        self.bounty_reward_edit.setFixedWidth(90)
+        bounty_row1.addWidget(self.bounty_reward_edit)
+        bounty_row1.addStretch()
+        bounty_layout.addLayout(bounty_row1)
 
+        bounty_row2 = QHBoxLayout()
+        bounty_row2.setSpacing(6)
         self.bounty_address_edit = QLineEdit()
-        self.bounty_address_edit.setPlaceholderText("Your wallet address (public key)")
-        bounty_form.addWidget(self.bounty_address_edit)
+        self.bounty_address_edit.setPlaceholderText("Your wallet address (for identification)")
+        bounty_row2.addWidget(self.bounty_address_edit)
+        bounty_layout.addLayout(bounty_row2)
 
+        bounty_row3 = QHBoxLayout()
+        bounty_row3.setSpacing(6)
+        self.bounty_desc_edit = QLineEdit()
+        self.bounty_desc_edit.setPlaceholderText("Description (optional)")
+        bounty_row3.addWidget(self.bounty_desc_edit)
         self.post_bounty_btn = QPushButton("Post Bounty")
-        self.post_bounty_btn.setFixedWidth(110)
+        self.post_bounty_btn.setFixedWidth(100)
         self.post_bounty_btn.setStyleSheet("""
             QPushButton {
                 background-color: #2a5a9e; border: 2px solid #4a8aee;
@@ -1334,21 +1315,42 @@ class MainWindow(QMainWindow):
             QPushButton:hover { background-color: #3a6abe; }
         """)
         self.post_bounty_btn.clicked.connect(self._post_bounty)
-        bounty_form.addWidget(self.post_bounty_btn)
-        bounty_layout.addLayout(bounty_form)
+        bounty_row3.addWidget(self.post_bounty_btn)
+        bounty_layout.addLayout(bounty_row3)
 
-        self.bounty_table = QTableWidget(0, 5)
-        self.bounty_table.setHorizontalHeaderLabels(["Word", "Reward", "Buyer", "Status", "Actions"])
+        mine_all_row = QHBoxLayout()
+        mine_all_btn = QPushButton("Mine All Bounties")
+        mine_all_btn.setFixedWidth(140)
+        mine_all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2a7a3e; border: 2px solid #4ae868;
+                border-radius: 4px; color: #e0ffe8; font-weight: bold;
+                font-size: 11px; padding: 4px 12px;
+            }
+            QPushButton:hover { background-color: #3a8a4e; }
+        """)
+        mine_all_btn.clicked.connect(self._mine_all_bounties)
+        mine_all_row.addWidget(mine_all_btn)
+        self.mine_all_status_label = QLabel("")
+        self.mine_all_status_label.setStyleSheet("font-size: 10px; color: #a0a0c0; background: transparent;")
+        mine_all_row.addWidget(self.mine_all_status_label)
+        mine_all_row.addStretch()
+        bounty_layout.addLayout(mine_all_row)
+
+        self.bounty_table = QTableWidget(0, 7)
+        self.bounty_table.setHorizontalHeaderLabels(["Pattern", "Type", "Reward", "Buyer", "Status", "Description", "Actions"])
         self.bounty_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.bounty_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
-        self.bounty_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.bounty_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.bounty_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.bounty_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
         self.bounty_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.bounty_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.bounty_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeToContents)
         self.bounty_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.bounty_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.bounty_table.setAlternatingRowColors(True)
         self.bounty_table.verticalHeader().setVisible(False)
-        self.bounty_table.setMaximumHeight(180)
+        self.bounty_table.setMaximumHeight(200)
         bounty_layout.addWidget(self.bounty_table)
 
         root.addWidget(bounty_box)
@@ -2034,7 +2036,8 @@ class MainWindow(QMainWindow):
                 self._thread_bridge.burn_error_signal.emit(err)
             else:
                 self._thread_bridge.burn_success_signal.emit(
-                    result.get("file", ""), vanity, result.get("burn_sig", ""))
+                    result.get("file", ""), vanity, result.get("burn_sig", ""),
+                    True)
 
         t = threading.Thread(target=_do_burn, daemon=True)
         t.start()
@@ -2043,13 +2046,14 @@ class MainWindow(QMainWindow):
         self.decrypt_status_label.setText(msg)
         self._mp_log(msg)
 
-    def _on_burn_success(self, filepath, vanity_address, burn_sig):
+    def _on_burn_success(self, filepath, vanity_address, burn_sig, is_importable):
         self.burn_btn.setEnabled(True)
-        self.decrypt_status_label.setText("NFT burned — key decrypted and saved!")
+        self.decrypt_status_label.setText("NFT burned — Phantom-importable key decrypted and saved!")
         self.decrypt_status_label.setStyleSheet("color: #50e050; font-size: 11px; font-weight: bold; background: transparent;")
         self.decrypted_key_edit.setText(filepath)
         self._mp_log(f"Burned NFT and decrypted key for: {vanity_address}")
         self._mp_log(f"  Burn TX: {burn_sig}")
+        self._mp_log(f"  Import into Phantom: Settings -> Add Wallet -> Import Private Key")
         self._mp_log(f"  Key saved to: {filepath}")
 
         indexes = self.packages_table.selectionModel().selectedRows()
@@ -2192,7 +2196,8 @@ class MainWindow(QMainWindow):
                 self._thread_bridge.burn_error_signal.emit(err)
             else:
                 self._thread_bridge.burn_success_signal.emit(
-                    result.get("file", ""), vanity_address, result.get("burn_sig", ""))
+                    result.get("file", ""), vanity_address, result.get("burn_sig", ""),
+                    True)
 
         t = threading.Thread(target=_do, daemon=True)
         t.start()
@@ -2249,31 +2254,57 @@ class MainWindow(QMainWindow):
             row = self.bounty_table.rowCount()
             self.bounty_table.insertRow(row)
             self.bounty_table.setItem(row, 0, QTableWidgetItem(b.get("word", "")))
-            self.bounty_table.setItem(row, 1, QTableWidgetItem(f"{b.get('reward_sol', 0)} SOL"))
+
+            ptype = b.get("pattern_type", "ends_with")
+            ptype_label = "Starts" if ptype == "starts_with" else "Contains" if ptype == "contains" else "Ends"
+            self.bounty_table.setItem(row, 1, QTableWidgetItem(ptype_label))
+
+            self.bounty_table.setItem(row, 2, QTableWidgetItem(f"{b.get('reward_sol', 0)} SOL"))
 
             buyer_addr = b.get("buyer_address", "")
             short = f"{buyer_addr[:6]}...{buyer_addr[-4:]}" if len(buyer_addr) > 12 else buyer_addr
-            self.bounty_table.setItem(row, 2, QTableWidgetItem(short))
+            self.bounty_table.setItem(row, 3, QTableWidgetItem(short))
 
             status = b.get("status", "open")
             status_item = QTableWidgetItem(status.upper())
             if status == "open":
                 status_item.setForeground(QColor(80, 224, 80))
             elif status == "fulfilled":
-                status_item.setForeground(QColor(80, 160, 255))
+                status_item.setForeground(QColor(255, 200, 50))
+            elif status == "collected":
+                status_item.setForeground(QColor(150, 150, 180))
+            elif status == "claimed":
+                status_item.setForeground(QColor(110, 168, 254))
             else:
                 status_item.setForeground(QColor(150, 150, 180))
-            self.bounty_table.setItem(row, 3, status_item)
+            self.bounty_table.setItem(row, 4, status_item)
 
+            desc = b.get("description", "") or b.get("notes", "")
+            self.bounty_table.setItem(row, 5, QTableWidgetItem(desc))
+
+            bounty_id = b.get("id")
             if status == "open":
+                actions_widget = QWidget()
+                actions_layout = QHBoxLayout(actions_widget)
+                actions_layout.setContentsMargins(2, 0, 2, 0)
+                actions_layout.setSpacing(4)
                 cancel_btn = QPushButton("Cancel")
-                cancel_btn.setFixedHeight(24)
-                cancel_btn.setStyleSheet("font-size: 10px; padding: 2px 8px;")
-                bounty_id = b.get("id")
+                cancel_btn.setFixedHeight(22)
+                cancel_btn.setStyleSheet("font-size: 9px; padding: 1px 6px;")
                 cancel_btn.clicked.connect(lambda checked, bid=bounty_id: self._cancel_bounty(bid))
-                self.bounty_table.setCellWidget(row, 4, cancel_btn)
+                actions_layout.addWidget(cancel_btn)
+                mine_btn = QPushButton("Mine")
+                mine_btn.setFixedHeight(22)
+                mine_btn.setStyleSheet("font-size: 9px; padding: 1px 6px; background-color: #2a5a9e; color: #e0e8ff;")
+                mine_btn.clicked.connect(lambda checked, bid=bounty_id, w=b.get("word", ""), bp=buyer_addr: self._claim_and_mine(bid, w, bp))
+                actions_layout.addWidget(mine_btn)
+                self.bounty_table.setCellWidget(row, 6, actions_widget)
+            elif status == "fulfilled":
+                buy_lbl = QLabel("Buy NFT in Marketplace")
+                buy_lbl.setStyleSheet("font-size: 9px; color: #6ea8fe; background: transparent; padding: 2px 4px;")
+                self.bounty_table.setCellWidget(row, 6, buy_lbl)
             else:
-                self.bounty_table.setItem(row, 4, QTableWidgetItem(""))
+                self.bounty_table.setItem(row, 6, QTableWidgetItem(""))
 
     def _post_bounty(self):
         word = self.bounty_word_edit.text().strip()
@@ -2281,7 +2312,7 @@ class MainWindow(QMainWindow):
         address = self.bounty_address_edit.text().strip()
 
         if not word:
-            self._mp_log("Bounty error: Enter a word")
+            self._mp_log("Bounty error: Enter a pattern")
             return
         try:
             reward = float(reward_text)
@@ -2295,13 +2326,23 @@ class MainWindow(QMainWindow):
             self._mp_log("Bounty error: Enter your wallet address")
             return
 
+        pattern_map = {"Ends with": "ends_with", "Starts with": "starts_with", "Contains": "contains"}
+        pattern_type = pattern_map.get(self.bounty_pattern_combo.currentText(), "ends_with")
+        case_insensitive = self.bounty_case_cb.isChecked()
+        description = self.bounty_desc_edit.text().strip()
+
         from core import backend as shared
-        bounty, err = shared.create_bounty(word, reward, address)
+        bounty, err = shared.create_bounty(
+            word, reward, address, description,
+            pattern_type=pattern_type, case_insensitive=case_insensitive,
+            description=description
+        )
         if err:
             self._mp_log(f"Bounty error: {err}")
         else:
-            self._mp_log(f'Bounty posted: "{word}" for {reward} SOL')
+            self._mp_log(f'Bounty posted: "{word}" ({pattern_type}) for {reward} SOL')
             self.bounty_word_edit.clear()
+            self.bounty_desc_edit.clear()
             self._load_bounties()
 
     def _cancel_bounty(self, bounty_id):
@@ -2309,6 +2350,77 @@ class MainWindow(QMainWindow):
         shared.delete_bounty(bounty_id)
         self._mp_log("Bounty cancelled")
         self._load_bounties()
+
+    def _claim_and_mine(self, bounty_id, word, buyer_address):
+        tab_widget = self.findChild(QTabWidget)
+        if tab_widget:
+            tab_widget.setCurrentIndex(0)
+        self._set_mining_mode("blind")
+        if hasattr(self, 'wordlist_edit'):
+            self.wordlist_edit.setEnabled(True)
+            self.wordlist_edit.setText(word)
+        self._on_log(f'Claimed bounty #{bounty_id}: mining "{word}"')
+        self._mp_log(f'Claimed bounty: mining "{word}"')
+
+    def _mine_all_bounties(self):
+        from core import backend as shared
+        bounty_words = shared.get_bounty_wordlist()
+        if not bounty_words:
+            self.mine_all_status_label.setText("No open bounties to mine")
+            return
+        words = [b["word"] for b in bounty_words if b.get("word")]
+        self.mine_all_status_label.setText(f"Queued {len(words)} bounty word(s)")
+        self._mp_log(f"Mine All: {len(words)} words queued")
+        if words:
+            tab_widget = self.findChild(QTabWidget)
+            if tab_widget:
+                tab_widget.setCurrentIndex(0)
+            self._set_mining_mode("blind")
+            if hasattr(self, 'wordlist_edit'):
+                self.wordlist_edit.setEnabled(True)
+                self.wordlist_edit.setText(", ".join(words))
+            self._on_log(f'Mining all bounties: {", ".join(words)}')
+
+    def _show_help_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("How SolVanity Works")
+        dlg.setMinimumSize(550, 450)
+        dlg.setStyleSheet("background-color: #1b1b2f; color: #c0c0d8;")
+        layout = QVBoxLayout(dlg)
+        browser = QTextBrowser()
+        browser.setOpenExternalLinks(True)
+        browser.setStyleSheet("background-color: #141428; border: 1px solid #3a3a5c; color: #c0c0d8; font-size: 12px; padding: 10px;")
+        browser.setHtml("""
+        <h2 style="color:#6ea8fe">How SolVanity Works</h2>
+        <h3 style="color:#64e678">Blind Mining</h3>
+        <ol>
+        <li>Miner mines vanity addresses matching dictionary words</li>
+        <li>Found keys are encrypted by a TEE (Trusted Execution Environment) using Lit Protocol</li>
+        <li>The full [seed + pubkey] keypair is encrypted &mdash; this is the standard Phantom-importable format</li>
+        <li>Encrypted packages are uploaded to Solana as NFTs with PDA escrow</li>
+        <li>Any buyer can purchase the NFT from the marketplace</li>
+        <li>Buyer burns the NFT &rarr; TEE verifies the burn on-chain &rarr; decrypts and returns the private key</li>
+        <li>Buyer imports the key into Phantom: Settings &rarr; Add Wallet &rarr; Import Private Key</li>
+        </ol>
+        <h3 style="color:#e0a050">Bounty Board</h3>
+        <ol>
+        <li>Post a wanted ad: specify your pattern, reward amount, and wallet address</li>
+        <li>Miners see open bounties and mine matching addresses</li>
+        <li>When fulfilled, the matching key is listed as an NFT on the marketplace</li>
+        <li>Buy the NFT, burn it, and get your Phantom-importable private key</li>
+        </ol>
+        <h3 style="color:#6ea8fe">Security</h3>
+        <ul>
+        <li>Private keys are encrypted inside a TEE &mdash; miner never sees the encrypted form</li>
+        <li>NFT burn is verified on-chain before decryption</li>
+        <li>All keys are Phantom-importable (64-byte [seed + pubkey] format)</li>
+        </ul>
+        """)
+        layout.addWidget(browser)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dlg.close)
+        layout.addWidget(close_btn)
+        dlg.exec()
 
     def _on_found_with_key(self, pubkey: str, pv_bytes: bytes, vanity_word: str = ""):
         if self._mining_mode != "blind":
@@ -2341,7 +2453,6 @@ class MainWindow(QMainWindow):
             pv_bytes, pubkey, wallet, vanity_word=vanity_word,
             price_sol=price_sol, log_fn=_log, mp_fn=_mp,
             on_success=_on_success, on_error=_on_error,
-            session_blob=getattr(self, '_session_blob', None),
         )
 
     def _on_upload_success(self, result, pubkey):
@@ -2536,27 +2647,11 @@ class MainWindow(QMainWindow):
         self._last_speed_raw = 0.0
         self._suffix_pattern_count = len(suffix_patterns)
 
-        tee_point = None
-        self._session_blob = None
-        if self._mining_mode == "blind":
-            try:
-                from core.marketplace.lit_encrypt import split_key_setup
-                self._on_log("[Blind] Setting up split-key protocol with TEE...")
-                self.status_label.setText("Split-key setup...")
-                session_result = split_key_setup()
-                tee_point = session_result["teePoint"]
-                self._session_blob = session_result
-                self._on_log(f"[Blind] Split-key setup complete (session: {session_result['sessionId'][:8]}...)")
-                self._on_log("[Blind] Mining with split-key: full private key will NEVER exist on this machine")
-            except Exception as e:
-                print(f"[Blind] Split-key setup failed: {e}", flush=True)
-                self._on_log(f"[Blind] Split-key setup failed: {e}")
-                self._on_log("[Blind] Falling back to direct encryption mode")
-
         count_limit = 0
         if self._mining_mode == "blind":
             count_limit = len(word_filter.words)
             self._on_log(f"[Blind] Will stop after finding {count_limit} addresses (one per word)")
+            self._on_log("[Blind] Keys will be encrypted by TEE and listed as NFTs (Phantom-importable)")
 
         if self._compute_mode == "gpu":
             self.mining_thread = MiningThread(
@@ -2569,7 +2664,6 @@ class MainWindow(QMainWindow):
                 power_pct=power_pct,
                 max_temp=max_temp,
                 mining_mode=self._mining_mode,
-                tee_point=tee_point,
             )
         else:
             self.mining_thread = CpuMiningThread(
@@ -2578,7 +2672,6 @@ class MainWindow(QMainWindow):
                 output_dir=output_dir,
                 count=count_limit,
                 mining_mode=self._mining_mode,
-                tee_point=tee_point,
             )
 
         self._blind_wallet_snapshot = self.seller_wallet_edit.text().strip() if self._mining_mode == "blind" else ""

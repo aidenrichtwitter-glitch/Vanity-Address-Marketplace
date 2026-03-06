@@ -533,7 +533,7 @@ def test_7_production_code_paths():
 
         upload_sig = inspect.signature(blind_upload)
         params = list(upload_sig.parameters.keys())
-        assert "session_blob" in params, f"blind_upload missing session_blob, has: {params}"
+        assert "buyer_pubkey" in params, f"blind_upload missing buyer_pubkey, has: {params}"
 
         pkp_key = _get_pkp_public_key()
         assert len(pkp_key) >= 64, f"PKP public key too short: {len(pkp_key)}"
@@ -576,13 +576,7 @@ def test_7_production_code_paths():
         logs = []
         mp_logs = []
         errors = []
-        test_session_blob = {
-            "teePoint": tee_point,
-            "wrappedScalar": base64.b64encode(os.urandom(48)).decode(),
-            "wrapIv": base64.b64encode(os.urandom(12)).decode(),
-            "sessionId": os.urandom(16).hex(),
-            "setupCodeHash": "test",
-        }
+        test_buyer_pubkey = b58encode(tee_point).decode()
         upload_thread = blind_upload(
             pv_bytes=seed,
             pubkey=vanity_addr,
@@ -592,7 +586,7 @@ def test_7_production_code_paths():
             log_fn=lambda m: logs.append(m),
             mp_fn=lambda m: mp_logs.append(m),
             on_error=lambda e, a: errors.append(e),
-            session_blob=test_session_blob,
+            buyer_pubkey=test_buyer_pubkey,
         )
         upload_thread.join(timeout=5)
 

@@ -432,6 +432,9 @@ tr.selected {
 .status-active { color: #64e678; }
 .status-burned { color: #ff5050; }
 .status-unknown { color: #9696b4; }
+.bounty-status-fulfilled { color: #ffc832; }
+.bounty-status-collected { color: #9696b4; }
+.bounty-status-claimed { color: #6ea8fe; }
 .verified-tee { color: #64e678; }
 .verified-unknown { color: #ffc832; }
 .verified-no { color: #ff5050; }

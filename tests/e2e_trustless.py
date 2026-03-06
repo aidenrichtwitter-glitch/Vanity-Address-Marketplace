@@ -1,44 +1,40 @@
 #!/usr/bin/env python3
-"""End-to-End Trustless Test — Cross-Instance Two-Person Scenario
+"""End-to-End Trustless Test — Direct-Encrypt Two-Person Scenario
 
 Validates the full trustless marketplace with two completely unrelated people,
-each using their own independent usage key for TEE operations:
+each using their own independent usage key for TEE operations.
 
+Flow (direct-encrypt, no split-key):
   PHASE 1 — Seller (Person A):
     1. Generate usage key from shared master account
-    2. Split-key setup using Seller's usage key
-    3. CPU-mine a vanity address
-    4. Split-key encrypt using Seller's usage key
-    5. Verify package contains pkpPublicKey (self-contained)
-    6. Upload to Solana PDA + mint NFT
+    2. CPU-mine a vanity address (direct key generation, no TEE offset)
+    3. TEE-encrypt full [seed+pubkey] keypair via encrypt_private_key()
+    4. Verify package contains pkpPublicKey (self-contained)
+    5. Upload to Solana PDA + mint NFT
 
   PHASE 2 — Buyer (Person B):
-    7. Generate DIFFERENT usage key from same shared master account
-    8. Simulate fresh instance: read pkpPublicKey from package only
-    9. Verify listing (TEE Verified, hash in trusted set)
-    10. Fund buyer wallet (devnet airdrop)
-    11. Buy (PDA escrow purchase)
-    12. Negative decrypt using Buyer's usage key → must fail pre-burn
-    13. Burn NFT on-chain
-    14. Decrypt using Buyer's usage key + package's pkpPublicKey → success
-    15. Verify decrypted key matches vanity address
+    6. Generate DIFFERENT usage key from same shared master account
+    7. Simulate fresh instance: read pkpPublicKey from package only
+    8. Verify listing (TEE Verified, hash in trusted set)
+    9. Fund buyer wallet (devnet airdrop)
+    10. Buy (PDA escrow purchase)
+    11. Negative decrypt using Buyer's usage key → must fail pre-burn
+    12. Burn NFT on-chain
+    13. Decrypt using Buyer's usage key + package's pkpPublicKey → success
+    14. Verify decrypted key is Phantom-importable (Keypair.from_bytes + sign TX)
 
   PHASE 3 — Trustlessness Audit:
-    16. Confirm keys are all different, no legacy code, cross-instance valid
+    15. Confirm keys are all different, no legacy code, cross-instance valid
 
 The master API key (MARKETPLACE_LIT_API_KEY) is hardcoded in config.py and owns
 the shared PKP. Each person gets their own usage key via create_user_scoped_key().
-These usage keys are independently sufficient for TEE operations (signEcdsa)
-against the shared PKP.
 
 Run: python tests/e2e_trustless.py
      python tests/e2e_trustless.py --offline   (skip Solana devnet steps)
 No env vars required — master key and PKP are hardcoded constants.
 """
 
-import base64
 import gc
-import hashlib
 import inspect
 import json
 import os
@@ -50,12 +46,6 @@ import traceback
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from base58 import b58decode, b58encode
-from nacl.bindings import (
-    crypto_core_ed25519_add,
-    crypto_core_ed25519_is_valid_point,
-    crypto_core_ed25519_scalar_reduce,
-    crypto_scalarmult_ed25519_base_noclamp,
-)
 from nacl.signing import SigningKey, VerifyKey
 from solders.keypair import Keypair as SolKeypair
 
@@ -67,15 +57,6 @@ class StepResult:
         self.message = ""
         self.elapsed = 0.0
         self.data = {}
-
-
-def clamp_scalar_from_seed(seed_bytes: bytes) -> bytes:
-    h = hashlib.sha512(seed_bytes).digest()[:32]
-    a = bytearray(h)
-    a[0] &= 248
-    a[31] &= 127
-    a[31] |= 64
-    return bytes(a)
 
 
 def _create_scoped_key_with_retry() -> str:
@@ -108,10 +89,8 @@ def step_01_seller_get_scoped_key() -> StepResult:
         r.passed = True
         r.data = {
             "seller_scoped_key": seller_scoped_key,
-            "seller_tee_key": seller_scoped_key,
             "pkp_public_key": pkp_key,
             "master_api_key": master_key,
-            "has_scoped_keys": True,
         }
         r.message = (
             f"Seller usage key: {seller_scoped_key[:12]}... "
@@ -123,42 +102,10 @@ def step_01_seller_get_scoped_key() -> StepResult:
     return r
 
 
-def step_02_seller_split_key_setup(seller_scoped_key: str) -> StepResult:
-    r = StepResult("Seller: Split-Key Setup (own scoped key)")
+def step_02_cpu_mining(target_prefix: str = "so") -> StepResult:
+    r = StepResult("Seller: CPU Mining (direct key generation)")
     start = time.time()
     try:
-        from core.marketplace.lit_encrypt import split_key_setup
-
-        session_blob = split_key_setup(api_key=seller_scoped_key)
-
-        assert "teePoint" in session_blob, f"Missing teePoint: {list(session_blob.keys())}"
-        assert "wrappedScalar" in session_blob, "Missing wrappedScalar"
-        assert "wrapIv" in session_blob, "Missing wrapIv"
-        assert "sessionId" in session_blob, "Missing sessionId"
-        assert "setupCodeHash" in session_blob, "Missing setupCodeHash"
-
-        tee_point = session_blob["teePoint"]
-        assert len(tee_point) == 32, f"TEE point wrong size: {len(tee_point)}"
-        assert crypto_core_ed25519_is_valid_point(tee_point), "TEE point is not a valid Ed25519 point"
-
-        r.passed = True
-        r.data = {"session_blob": session_blob}
-        r.message = (
-            f"TEE point: {tee_point.hex()[:24]}... "
-            f"Session: {session_blob['sessionId'][:12]}... "
-            f"(used Seller's scoped key)"
-        )
-    except Exception as e:
-        r.message = f"FAILED: {e}\n{traceback.format_exc()}"
-    r.elapsed = time.time() - start
-    return r
-
-
-def step_03_cpu_mining(session_blob: dict, target_prefix: str = "so") -> StepResult:
-    r = StepResult("Seller: CPU Mining")
-    start = time.time()
-    try:
-        tee_point = session_blob["teePoint"]
         found_seed = None
         found_addr = None
         attempts = 0
@@ -166,10 +113,9 @@ def step_03_cpu_mining(session_blob: dict, target_prefix: str = "so") -> StepRes
 
         while attempts < max_attempts:
             seed = secrets.token_bytes(32)
-            miner_scalar = clamp_scalar_from_seed(seed)
-            miner_point = crypto_scalarmult_ed25519_base_noclamp(miner_scalar)
-            combined = crypto_core_ed25519_add(miner_point, tee_point)
-            addr = b58encode(combined).decode()
+            sk = SigningKey(seed)
+            pubkey_bytes = bytes(sk.verify_key)
+            addr = b58encode(pubkey_bytes).decode()
             attempts += 1
 
             if addr.lower().startswith(target_prefix):
@@ -190,17 +136,18 @@ def step_03_cpu_mining(session_blob: dict, target_prefix: str = "so") -> StepRes
     return r
 
 
-def step_04_seller_encrypt(session_blob: dict, seed: bytes, vanity_address: str, seller_scoped_key: str) -> StepResult:
-    r = StepResult("Seller: Split-Key Encrypt (own scoped key)")
+def step_03_seller_encrypt(seed: bytes, vanity_address: str, seller_scoped_key: str) -> StepResult:
+    r = StepResult("Seller: TEE Encrypt full [seed+pubkey] (direct-encrypt)")
     start = time.time()
     try:
-        from core.marketplace.lit_encrypt import split_key_encrypt
+        from core.marketplace.lit_encrypt import encrypt_private_key
 
-        miner_scalar = clamp_scalar_from_seed(seed)
+        sk = SigningKey(seed)
+        pubkey_bytes = bytes(sk.verify_key)
+        privkey_b58 = b58encode(seed + pubkey_bytes).decode()
 
-        package = split_key_encrypt(
-            miner_scalar=miner_scalar,
-            session_blob=session_blob,
+        package = encrypt_private_key(
+            privkey_b58=privkey_b58,
             vanity_address=vanity_address,
             api_key=seller_scoped_key,
         )
@@ -210,9 +157,12 @@ def step_04_seller_encrypt(session_blob: dict, seed: bytes, vanity_address: str,
         assert package.get("wrappedKey"), "Missing wrappedKey"
         assert package.get("wrapIv"), "Missing wrapIv"
         assert package.get("encryptedInTEE") is True, "Missing encryptedInTEE flag"
-        assert package.get("splitKey") is True, "Missing splitKey flag"
         assert package.get("litActionHash"), "Missing litActionHash"
         assert package["vanityAddress"] == vanity_address, "Address mismatch"
+
+        assert not package.get("splitKey"), "Package should NOT have splitKey flag"
+        assert not package.get("splitKeyV2"), "Package should NOT have splitKeyV2 flag"
+        assert not package.get("splitKeyV3"), "Package should NOT have splitKeyV3 flag"
 
         r.passed = True
         r.data = {"package": package}
@@ -220,6 +170,7 @@ def step_04_seller_encrypt(session_blob: dict, seed: bytes, vanity_address: str,
         r.message = (
             f"Encrypted: ciphertext={ct_len} chars, "
             f"hash={package.get('litActionHash', '')[:12]}... "
+            f"NO split-key flags (direct-encrypt). "
             f"(used Seller's scoped key)"
         )
     except Exception as e:
@@ -228,7 +179,7 @@ def step_04_seller_encrypt(session_blob: dict, seed: bytes, vanity_address: str,
     return r
 
 
-def step_05_verify_pkp_in_package(package: dict, pkp_public_key: str) -> StepResult:
+def step_04_verify_pkp_in_package(package: dict, pkp_public_key: str) -> StepResult:
     r = StepResult("Seller: Verify pkpPublicKey in Package")
     start = time.time()
     try:
@@ -247,23 +198,27 @@ def step_05_verify_pkp_in_package(package: dict, pkp_public_key: str) -> StepRes
     return r
 
 
-def step_06_upload(seed: bytes, vanity_address: str, package: dict) -> StepResult:
+def step_05_upload(seed: bytes, vanity_address: str, package: dict) -> StepResult:
     r = StepResult("Seller: Upload to Solana")
     start = time.time()
     try:
         from core.backend import blind_upload
+        from core.marketplace.solana_client import load_seller_keypair
+        import os
 
-        seller_kp = SolKeypair()
+        seller_key = os.environ.get("SOLANA_DEVNET_PRIVKEY", "")
+        assert seller_key, "SOLANA_DEVNET_PRIVKEY not set"
+        seller_kp = load_seller_keypair(seller_key)
         seller_pubkey = str(seller_kp.pubkey())
 
         logs = []
         mp_logs = []
         errors = []
-        mint_address = [None]
+        result_data = [None]
 
-        def on_success(info):
+        def on_success(info, addr):
             if isinstance(info, dict):
-                mint_address[0] = info.get("mint_address", "")
+                result_data[0] = info
 
         upload_thread = blind_upload(
             pv_bytes=seed,
@@ -275,7 +230,6 @@ def step_06_upload(seed: bytes, vanity_address: str, package: dict) -> StepResul
             mp_fn=lambda m: mp_logs.append(m),
             on_error=lambda e, a: errors.append(str(e)),
             on_success=on_success,
-            session_blob=None,
         )
         upload_thread.join(timeout=120)
 
@@ -283,17 +237,25 @@ def step_06_upload(seed: bytes, vanity_address: str, package: dict) -> StepResul
             r.message = f"Upload errors: {errors}. Logs: {mp_logs[-5:]}"
             return r
 
+        mint_address = result_data[0].get("mint_address", "") if result_data[0] else None
+
+        onchain_package = dict(package)
+        onchain_package["mintAddress"] = mint_address
+        onchain_package["sellerAddress"] = seller_pubkey
+        onchain_package["priceLamports"] = int(0.001 * 1_000_000_000)
+
         r.passed = True
         r.data = {
             "seller_kp": seller_kp,
             "seller_pubkey": seller_pubkey,
-            "mint_address": mint_address[0],
+            "mint_address": mint_address,
+            "onchain_package": onchain_package,
             "logs": logs,
             "mp_logs": mp_logs,
         }
         r.message = (
             f"Uploaded. Seller: {seller_pubkey[:12]}... "
-            f"Mint: {mint_address[0] or 'N/A'}. "
+            f"Mint: {mint_address or 'N/A'}. "
             f"Steps: {len(mp_logs)}"
         )
     except Exception as e:
@@ -302,7 +264,7 @@ def step_06_upload(seed: bytes, vanity_address: str, package: dict) -> StepResul
     return r
 
 
-def step_07_buyer_get_scoped_key(seller_scoped_key: str) -> StepResult:
+def step_06_buyer_get_scoped_key(seller_scoped_key: str) -> StepResult:
     r = StepResult("Buyer: Get DIFFERENT Usage Key from Shared Account")
     start = time.time()
     try:
@@ -326,7 +288,7 @@ def step_07_buyer_get_scoped_key(seller_scoped_key: str) -> StepResult:
     return r
 
 
-def step_08_buyer_fresh_instance(package: dict) -> StepResult:
+def step_07_buyer_fresh_instance(package: dict) -> StepResult:
     r = StepResult("Buyer: Fresh Instance — Read pkpPublicKey from Package")
     start = time.time()
     try:
@@ -352,7 +314,7 @@ def step_08_buyer_fresh_instance(package: dict) -> StepResult:
     return r
 
 
-def step_09_verify_listing(package: dict) -> StepResult:
+def step_08_verify_listing(package: dict) -> StepResult:
     r = StepResult("Buyer: Verify Listing (TEE)")
     start = time.time()
     try:
@@ -370,10 +332,14 @@ def step_09_verify_listing(package: dict) -> StepResult:
             f"Package hash {package['litActionHash'][:16]}... not in trusted set"
         )
 
+        assert not package.get("splitKey"), "Package should NOT have splitKey (direct-encrypt)"
+        assert not package.get("splitKeyV2"), "Package should NOT have splitKeyV2"
+        assert not package.get("splitKeyV3"), "Package should NOT have splitKeyV3"
+
         r.passed = True
         r.message = (
             f"TEE Verified: hash {package['litActionHash'][:16]}... in trusted set. "
-            f"Package has encryptedInTEE=True, splitKey={package.get('splitKey')}"
+            f"Direct-encrypt (no split-key flags)"
         )
     except Exception as e:
         r.message = f"FAILED: {e}\n{traceback.format_exc()}"
@@ -381,60 +347,104 @@ def step_09_verify_listing(package: dict) -> StepResult:
     return r
 
 
-def step_10_fund_buyer() -> StepResult:
-    r = StepResult("Buyer: Fund Wallet")
+def step_09_fund_buyer(seller_kp) -> StepResult:
+    r = StepResult("Buyer: Fund Wallet (transfer from Seller)")
     start = time.time()
     try:
         from solana.rpc.api import Client
+        from solders.system_program import transfer, TransferParams
+        from solders.transaction import Transaction
+        from solders.message import Message
         from core.marketplace.config import RPC_URL
 
         buyer_kp = SolKeypair()
         buyer_pubkey = str(buyer_kp.pubkey())
 
         client = Client(RPC_URL)
-        airdrop_sig = client.request_airdrop(buyer_kp.pubkey(), 2_000_000_000)
 
-        time.sleep(20)
+        seller_bal = client.get_balance(seller_kp.pubkey())
+        seller_lamports = seller_bal.value if hasattr(seller_bal, 'value') else 0
+        assert seller_lamports >= 600_000_000, (
+            f"Seller wallet too low: {seller_lamports / 1e9:.4f} SOL"
+        )
 
-        balance = client.get_balance(buyer_kp.pubkey())
-        lamports = balance.value if hasattr(balance, 'value') else 0
+        fund_amount = 500_000_000
+        ix = transfer(TransferParams(
+            from_pubkey=seller_kp.pubkey(),
+            to_pubkey=buyer_kp.pubkey(),
+            lamports=fund_amount,
+        ))
+        recent = client.get_latest_blockhash()
+        blockhash = recent.value.blockhash
+        msg = Message([ix], seller_kp.pubkey())
+        tx = Transaction([seller_kp], msg, blockhash)
+        resp = client.send_transaction(tx)
 
-        if lamports < 1_000_000_000:
-            r.message = f"Airdrop may have failed. Balance: {lamports} lamports"
+        sig_val = resp.value if hasattr(resp, 'value') else str(resp)
+
+        for _ in range(30):
+            time.sleep(2)
+            balance = client.get_balance(buyer_kp.pubkey())
+            lamports = balance.value if hasattr(balance, 'value') else 0
+            if lamports >= 100_000_000:
+                break
+
+        if lamports < 100_000_000:
+            r.message = (
+                f"Transfer may have failed. Buyer balance: {lamports} lamports. "
+                f"TX sig: {sig_val}. Seller had: {seller_lamports / 1e9:.4f} SOL"
+            )
             return r
 
         r.passed = True
         r.data = {"buyer_kp": buyer_kp, "buyer_pubkey": buyer_pubkey}
-        r.message = f"Buyer funded: {buyer_pubkey[:12]}... Balance: {lamports / 1e9:.2f} SOL"
+        r.message = f"Buyer funded: {buyer_pubkey[:12]}... Balance: {lamports / 1e9:.2f} SOL (transferred from seller)"
     except Exception as e:
         r.message = f"FAILED: {e}\n{traceback.format_exc()}"
     r.elapsed = time.time() - start
     return r
 
 
-def step_11_buy(buyer_kp, mint_address: str, seller_pubkey: str, vanity_address: str) -> StepResult:
-    r = StepResult("Buyer: Buy (PDA Escrow)")
+def step_10_buy(buyer_kp, mint_address: str, vanity_address: str, package: dict) -> StepResult:
+    r = StepResult("Buyer: Buy via PDA (on-chain program)")
     start = time.time()
     try:
-        from core.marketplace.nft import transfer_nft, check_token_balance
+        from core.backend import buy_nft
+        from core.marketplace.nft import check_token_balance
 
-        transfer_nft(buyer_kp, mint_address, str(buyer_kp.pubkey()))
+        logs = []
+        result, err = buy_nft(
+            buyer_key=str(buyer_kp),
+            encrypted_json=package,
+            mint_address=mint_address,
+            vanity_address=vanity_address,
+            log_fn=lambda m: logs.append(m),
+        )
 
-        time.sleep(5)
+        if err:
+            r.message = f"buy_nft returned error: {err}. Logs: {logs[-5:]}"
+            return r
 
-        bal = check_token_balance(str(buyer_kp.pubkey()), mint_address)
-        assert bal >= 1, f"Buyer doesn't own NFT after transfer. Balance: {bal}"
+        assert result and result.get("ok"), f"buy_nft result not ok: {result}"
+
+        time.sleep(8)
+
+        bal = check_token_balance(buyer_kp.pubkey(), mint_address)
+        assert bal >= 1, f"Buyer doesn't own NFT after buy. Balance: {bal}"
 
         r.passed = True
         r.data = {"buyer_owns_nft": True}
-        r.message = f"Buyer owns NFT (mint={mint_address[:12]}...)"
+        r.message = (
+            f"Buyer owns NFT via PDA buy. Mint: {mint_address[:12]}... "
+            f"TX: {result.get('transfer_sig', '')[:16]}..."
+        )
     except Exception as e:
         r.message = f"FAILED: {e}\n{traceback.format_exc()}"
     r.elapsed = time.time() - start
     return r
 
 
-def step_12_negative_decrypt(package: dict, buyer_scoped_key: str, mint_address: str) -> StepResult:
+def step_11_negative_decrypt(package: dict, buyer_scoped_key: str, mint_address: str) -> StepResult:
     r = StepResult("Buyer: Negative Decrypt (Pre-Burn, Buyer's key)")
     start = time.time()
     try:
@@ -461,7 +471,7 @@ def step_12_negative_decrypt(package: dict, buyer_scoped_key: str, mint_address:
     return r
 
 
-def step_13_burn_nft(buyer_kp, mint_address: str) -> StepResult:
+def step_12_burn_nft(buyer_kp, mint_address: str) -> StepResult:
     r = StepResult("Buyer: Burn NFT")
     start = time.time()
     try:
@@ -482,7 +492,7 @@ def step_13_burn_nft(buyer_kp, mint_address: str) -> StepResult:
     return r
 
 
-def step_14_decrypt(package: dict, buyer_scoped_key: str, mint_address: str) -> StepResult:
+def step_13_decrypt(package: dict, buyer_scoped_key: str, mint_address: str) -> StepResult:
     r = StepResult("Buyer: Decrypt (Post-Burn, Buyer's own key)")
     start = time.time()
     try:
@@ -506,35 +516,60 @@ def step_14_decrypt(package: dict, buyer_scoped_key: str, mint_address: str) -> 
     return r
 
 
-def step_15_verify_key(plaintext: str, vanity_address: str) -> StepResult:
-    r = StepResult("Buyer: Verify Decrypted Key")
+def step_14_verify_phantom_importable(plaintext: str, vanity_address: str) -> StepResult:
+    r = StepResult("Buyer: Verify Phantom-Importable Key")
     start = time.time()
     try:
-        privkey_bytes = b58decode(plaintext)
+        decoded = b58decode(plaintext)
 
-        if len(privkey_bytes) == 64:
-            signing_key = SigningKey(privkey_bytes[:32])
-        elif len(privkey_bytes) == 32:
-            signing_key = SigningKey(privkey_bytes)
-        else:
-            r.message = f"Unexpected key length: {len(privkey_bytes)}"
-            return r
+        assert len(decoded) == 64, f"Expected 64 bytes, got {len(decoded)}"
 
-        verify_key = signing_key.verify_key
-        pub_b58 = b58encode(bytes(verify_key)).decode()
+        seed = decoded[:32]
+        pubkey = decoded[32:]
 
-        test_message = b"solvanity-e2e-verification"
-        signed = signing_key.sign(test_message)
-        verify_key.verify(signed.message, signed.signature)
+        sk = SigningKey(seed)
+        derived_pubkey = bytes(sk.verify_key)
+        assert derived_pubkey == pubkey, (
+            f"SigningKey(seed).verify_key MISMATCH: "
+            f"{b58encode(derived_pubkey).decode()[:16]}... != {b58encode(pubkey).decode()[:16]}..."
+        )
 
+        pub_b58 = b58encode(pubkey).decode()
         assert pub_b58 == vanity_address, (
             f"Public key mismatch: decrypted={pub_b58[:16]}... expected={vanity_address[:16]}..."
         )
 
+        test_message = b"solvanity-e2e-verification"
+        signed = sk.sign(test_message)
+        VerifyKey(pubkey).verify(signed.message, signed.signature)
+
+        from solders.keypair import Keypair
+        kp = Keypair.from_bytes(decoded)
+        solders_addr = str(kp.pubkey())
+        assert solders_addr == vanity_address, f"solders pubkey mismatch: {solders_addr}"
+
+        solders_sig = kp.sign_message(test_message)
+        VerifyKey(pubkey).verify(test_message, bytes(solders_sig))
+
+        from solders.pubkey import Pubkey as SolPubkey
+        from solders.hash import Hash as Blockhash
+        from solders.transaction import Transaction
+        from solders.message import Message
+        from solders.system_program import transfer, TransferParams
+
+        from_pub = kp.pubkey()
+        to_pub = SolPubkey.from_string("11111111111111111111111111111111")
+        ix = transfer(TransferParams(from_pubkey=from_pub, to_pubkey=to_pub, lamports=1000))
+        msg_obj = Message([ix], from_pub)
+        tx = Transaction([kp], msg_obj, Blockhash.default())
+        assert len(tx.signatures) == 1
+
         r.passed = True
         r.message = (
-            f"Key verified: pubkey matches vanity address. "
-            f"Signed and verified test message ({len(signed.signature)} byte sig)"
+            f"KEY IS PHANTOM-IMPORTABLE: "
+            f"64 bytes, SigningKey(seed) matches, "
+            f"Keypair.from_bytes() OK, sign_message() OK, "
+            f"Solana TX signed OK. Address: {vanity_address}"
         )
     except Exception as e:
         r.message = f"FAILED: {e}\n{traceback.format_exc()}"
@@ -542,7 +577,7 @@ def step_15_verify_key(plaintext: str, vanity_address: str) -> StepResult:
     return r
 
 
-def step_16_trustlessness_audit(
+def step_15_trustlessness_audit(
     seller_scoped_key: str, buyer_scoped_key: str,
     master_api_key: str, package: dict,
 ) -> StepResult:
@@ -585,32 +620,15 @@ def step_16_trustlessness_audit(
         assert not hasattr(lit_encrypt, '_SHARED_WRAPPING_SALT'), (
             "_SHARED_WRAPPING_SALT still exists in module"
         )
-        assert not hasattr(lit_encrypt, '_derive_wrapping_key_legacy'), (
-            "_derive_wrapping_key_legacy still exists in module"
-        )
-        assert not hasattr(lit_encrypt, '_try_decrypt_with_key'), (
-            "_try_decrypt_with_key still exists in module"
-        )
 
         source = inspect.getsource(lit_encrypt)
-
         assert 'SHARED_WRAPPING_SALT' not in source, "Source still references SHARED_WRAPPING_SALT"
-        assert 'derive_wrapping_key(' not in source.replace('deriveWrappingKeyFromPKP', ''), (
-            "Source still references derive_wrapping_key function"
-        )
-
         assert 'deriveWrappingKeyFromPKP' in source, "Source missing PKP-based key derivation"
         assert 'LitActions.signEcdsa' in source, "Source missing signEcdsa calls"
-        assert 'solvanity-wrap:' in source, "Source missing wrapping key purpose prefix"
 
-        split_encrypt_src = inspect.getsource(lit_encrypt.split_key_encrypt)
-        assert '"pkpPublicKey"' in split_encrypt_src, "split_key_encrypt missing pkpPublicKey in package"
-        assert 'api_key' in inspect.signature(lit_encrypt.split_key_encrypt).parameters, (
-            "split_key_encrypt missing api_key parameter"
-        )
-        assert 'api_key' in inspect.signature(lit_encrypt.split_key_setup).parameters, (
-            "split_key_setup missing api_key parameter"
-        )
+        assert not package.get("splitKey"), "Package has splitKey — should be direct-encrypt"
+        assert not package.get("splitKeyV2"), "Package has splitKeyV2 — should be direct-encrypt"
+        assert not package.get("splitKeyV3"), "Package has splitKeyV3 — should be direct-encrypt"
 
         gc.collect()
 
@@ -620,7 +638,7 @@ def step_16_trustlessness_audit(
             f"seller_usage({seller_scoped_key[:8]}...) "
             f"buyer_usage({buyer_scoped_key[:8]}...) "
             f"master({master_api_key[:8]}...). "
-            f"pkpPublicKey in package. No legacy code. "
+            f"pkpPublicKey in package. Direct-encrypt (no split-key). "
             f"Shared-account trustless architecture verified."
         )
     except Exception as e:
@@ -629,8 +647,8 @@ def step_16_trustlessness_audit(
     return r
 
 
-TOTAL_STEPS = 16
-ONLINE_STEPS = {6, 10, 11, 12, 13, 14, 15}
+TOTAL_STEPS = 15
+ONLINE_STEPS = {5, 9, 10, 11, 12, 13, 14}
 
 
 def run_step(num, total, func, results, step_data, fatal=False):
@@ -650,8 +668,9 @@ def run_step(num, total, func, results, step_data, fatal=False):
 
 def main():
     print("=" * 72)
-    print("  SolVanity — End-to-End Cross-Instance Trustless Test")
+    print("  SolVanity — End-to-End Direct-Encrypt Trustless Test")
     print("  Two-Person Scenario: Independent Scoped Keys")
+    print("  Direct key encryption (no split-key) — Phantom-importable")
     print("=" * 72)
     print()
 
@@ -664,7 +683,7 @@ def main():
     step_data = {}
 
     print("=" * 72)
-    print("  PHASE 1: SELLER (Person A) — Own Scoped Key")
+    print("  PHASE 1: SELLER (Person A) — Mine + Encrypt + Upload")
     print("=" * 72)
     print()
 
@@ -673,50 +692,46 @@ def main():
              results, step_data, fatal=True)
 
     run_step(2, TOTAL_STEPS,
-             lambda: step_02_seller_split_key_setup(step_data["seller_scoped_key"]),
+             lambda: step_02_cpu_mining(target_prefix="so"),
              results, step_data, fatal=True)
 
     run_step(3, TOTAL_STEPS,
-             lambda: step_03_cpu_mining(step_data["session_blob"], target_prefix="so"),
-             results, step_data, fatal=True)
-
-    run_step(4, TOTAL_STEPS,
-             lambda: step_04_seller_encrypt(
-                 step_data["session_blob"], step_data["seed"],
-                 step_data["vanity_address"], step_data["seller_scoped_key"]),
-             results, step_data, fatal=True)
-
-    run_step(5, TOTAL_STEPS,
-             lambda: step_05_verify_pkp_in_package(step_data["package"], step_data["pkp_public_key"]),
-             results, step_data, fatal=True)
-
-    if not offline_only:
-        run_step(6, TOTAL_STEPS,
-                 lambda: step_06_upload(step_data["seed"], step_data["vanity_address"], step_data["package"]),
-                 results, step_data, fatal=False)
-
-    print("=" * 72)
-    print("  PHASE 2: BUYER (Person B) — Own DIFFERENT Scoped Key")
-    print("=" * 72)
-    print()
-
-    run_step(7, TOTAL_STEPS,
-             lambda: step_07_buyer_get_scoped_key(
+             lambda: step_03_seller_encrypt(
+                 step_data["seed"], step_data["vanity_address"],
                  step_data["seller_scoped_key"]),
              results, step_data, fatal=True)
 
-    run_step(8, TOTAL_STEPS,
-             lambda: step_08_buyer_fresh_instance(step_data["package"]),
+    run_step(4, TOTAL_STEPS,
+             lambda: step_04_verify_pkp_in_package(step_data["package"], step_data["pkp_public_key"]),
              results, step_data, fatal=True)
 
-    run_step(9, TOTAL_STEPS,
-             lambda: step_09_verify_listing(step_data["package"]),
+    if not offline_only:
+        run_step(5, TOTAL_STEPS,
+                 lambda: step_05_upload(step_data["seed"], step_data["vanity_address"], step_data["package"]),
+                 results, step_data, fatal=False)
+
+    print("=" * 72)
+    print("  PHASE 2: BUYER (Person B) — Buy + Burn + Decrypt + Verify")
+    print("=" * 72)
+    print()
+
+    run_step(6, TOTAL_STEPS,
+             lambda: step_06_buyer_get_scoped_key(
+                 step_data["seller_scoped_key"]),
+             results, step_data, fatal=True)
+
+    run_step(7, TOTAL_STEPS,
+             lambda: step_07_buyer_fresh_instance(step_data["package"]),
+             results, step_data, fatal=True)
+
+    run_step(8, TOTAL_STEPS,
+             lambda: step_08_verify_listing(step_data["package"]),
              results, step_data, fatal=False)
 
     if offline_only:
-        print("STEPS 6, 10-15: SKIPPED (offline mode)")
+        print("STEPS 5, 9-14: SKIPPED (offline mode)")
         print()
-        for i in [6, 10, 11, 12, 13, 14, 15]:
+        for i in [5, 9, 10, 11, 12, 13, 14]:
             skip_r = StepResult(f"Step {i} (skipped)")
             skip_r.passed = True
             skip_r.message = "Skipped (offline mode)"
@@ -725,37 +740,38 @@ def main():
         has_mint = step_data.get("mint_address")
 
         if has_mint:
-            run_step(10, TOTAL_STEPS,
-                     lambda: step_10_fund_buyer(),
+            run_step(9, TOTAL_STEPS,
+                     lambda: step_09_fund_buyer(step_data["seller_kp"]),
                      results, step_data, fatal=False)
 
             if step_data.get("buyer_kp"):
-                run_step(11, TOTAL_STEPS,
-                         lambda: step_11_buy(
+                onchain_pkg = step_data.get("onchain_package") or step_data["package"]
+                run_step(10, TOTAL_STEPS,
+                         lambda: step_10_buy(
                              step_data["buyer_kp"], step_data["mint_address"],
-                             step_data["seller_pubkey"], step_data["vanity_address"]),
+                             step_data["vanity_address"], onchain_pkg),
                          results, step_data, fatal=False)
 
-                run_step(12, TOTAL_STEPS,
-                         lambda: step_12_negative_decrypt(
-                             step_data["package"], step_data["buyer_scoped_key"],
+                run_step(11, TOTAL_STEPS,
+                         lambda: step_11_negative_decrypt(
+                             onchain_pkg, step_data["buyer_scoped_key"],
                              step_data["mint_address"]),
                          results, step_data, fatal=False)
 
-                run_step(13, TOTAL_STEPS,
-                         lambda: step_13_burn_nft(step_data["buyer_kp"], step_data["mint_address"]),
+                run_step(12, TOTAL_STEPS,
+                         lambda: step_12_burn_nft(step_data["buyer_kp"], step_data["mint_address"]),
                          results, step_data, fatal=False)
 
                 if results[-1].passed:
-                    run_step(14, TOTAL_STEPS,
-                             lambda: step_14_decrypt(
-                                 step_data["package"], step_data["buyer_scoped_key"],
+                    run_step(13, TOTAL_STEPS,
+                             lambda: step_13_decrypt(
+                                 onchain_pkg, step_data["buyer_scoped_key"],
                                  step_data["mint_address"]),
                              results, step_data, fatal=False)
 
                     if results[-1].passed and step_data.get("plaintext"):
-                        run_step(15, TOTAL_STEPS,
-                                 lambda: step_15_verify_key(
+                        run_step(14, TOTAL_STEPS,
+                                 lambda: step_14_verify_phantom_importable(
                                      step_data["plaintext"], step_data["vanity_address"]),
                                  results, step_data, fatal=False)
 
@@ -764,8 +780,8 @@ def main():
     print("=" * 72)
     print()
 
-    run_step(16, TOTAL_STEPS,
-             lambda: step_16_trustlessness_audit(
+    run_step(15, TOTAL_STEPS,
+             lambda: step_15_trustlessness_audit(
                  step_data["seller_scoped_key"], step_data["buyer_scoped_key"],
                  step_data["master_api_key"], step_data["package"]),
              results, step_data, fatal=False)
@@ -787,16 +803,15 @@ def main():
     print()
 
     if passed == total:
-        print("  SHARED-ACCOUNT TRUSTLESS PROPERTIES VERIFIED:")
-        print("    - Seller has own usage key for TEE operations")
-        print("    - Buyer has DIFFERENT usage key for TEE operations")
-        print("    - 3 unique keys: seller_usage, buyer_usage, master")
-        print("    - All usage keys created from shared master account (owns PKP)")
-        print("    - Seller encrypted with their usage key")
+        print("  DIRECT-ENCRYPT TRUSTLESS PROPERTIES VERIFIED:")
+        print("    - Seller mines vanity address (direct key generation, no TEE offset)")
+        print("    - Full [seed+pubkey] encrypted by TEE (Phantom-importable format)")
+        print("    - No split-key flags in package")
         print("    - Buyer decrypted with their own different usage key")
+        print("    - Decrypted key passes Keypair.from_bytes() (solders)")
+        print("    - Decrypted key can sign Solana transactions")
         print("    - pkpPublicKey traveled in the package (self-contained)")
         print("    - All wrapping keys derived inside TEE via PKP signEcdsa")
-        print("    - No legacy key derivation code remains")
         print("    - Any person with any usage key can participate")
         print()
     else:

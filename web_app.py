@@ -83,19 +83,8 @@ def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_e
         from nacl.signing import SigningKey
         from base58 import b58encode
 
-        tee_point = mining_state.get("tee_point")
-        use_split_key = tee_point is not None and len(tee_point) == 32 and any(b != 0 for b in tee_point)
-
-        if use_split_key:
-            from nacl.bindings import (
-                crypto_scalarmult_ed25519_base_noclamp,
-                crypto_core_ed25519_add,
-            )
-
         if simple_suffix:
             broadcast_event("log", {"msg": f"CPU mining mode — simple suffix match: ends with '{simple_suffix}'"})
-        elif use_split_key:
-            broadcast_event("log", {"msg": "CPU mining mode (split-key) — no GPU required"})
         else:
             broadcast_event("log", {"msg": "CPU mining mode — no GPU required"})
         broadcast_event("status", {"msg": "Mining (CPU)..."})
@@ -113,19 +102,9 @@ def cpu_mining_worker(word_filter, output_dir, mining_mode, blind_wallet, stop_e
 
             seed = secrets.token_bytes(32)
 
-            if use_split_key:
-                h = _hl.sha512(seed).digest()
-                scalar = bytearray(h[:32])
-                scalar[0] &= 248
-                scalar[31] &= 63
-                scalar[31] |= 64
-                miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
-                combined_point = crypto_core_ed25519_add(miner_point, tee_point)
-                pubkey = b58encode(combined_point).decode()
-            else:
-                sk = SigningKey(seed)
-                pk_bytes = bytes(sk.verify_key)
-                pubkey = b58encode(pk_bytes).decode()
+            sk = SigningKey(seed)
+            pk_bytes = bytes(sk.verify_key)
+            pubkey = b58encode(pk_bytes).decode()
 
             keys_checked += 1
 
@@ -227,8 +206,6 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
         result_count = 0
         start_time = time.time()
 
-        tee_point = mining_state.get("tee_point")
-
         from core.word_miner import _persistent_worker
 
         mp_ctx = multiprocessing.get_context("spawn")
@@ -241,8 +218,6 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
                 "suffix_width": suffix_width,
                 "suffix_lengths": suffix_lengths,
             }
-            if tee_point:
-                worker_kwargs["tee_point"] = tee_point
             proc = mp_ctx.Process(
                 target=_persistent_worker,
                 args=(idx, kernel_source, iteration_bits, gpu_counts, None, c_conn,
@@ -280,28 +255,7 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
                     if msg["type"] == "found":
                         output = msg["data"]
                         pv_bytes = bytes(output[1:33])
-                        gpu_pubkey_bytes = bytes(output[33:65])
-                        tee_point = mining_state.get("tee_point")
-                        if tee_point and any(b != 0 for b in gpu_pubkey_bytes):
-                            from base58 import b58encode
-                            pubkey = b58encode(gpu_pubkey_bytes).decode()
-                        elif tee_point:
-                            import hashlib
-                            from base58 import b58encode
-                            from nacl.bindings import (
-                                crypto_scalarmult_ed25519_base_noclamp,
-                                crypto_core_ed25519_add,
-                            )
-                            h = hashlib.sha512(pv_bytes).digest()
-                            scalar = bytearray(h[:32])
-                            scalar[0] &= 248
-                            scalar[31] &= 63
-                            scalar[31] |= 64
-                            miner_point = crypto_scalarmult_ed25519_base_noclamp(bytes(scalar))
-                            combined_point = crypto_core_ed25519_add(miner_point, tee_point)
-                            pubkey = b58encode(combined_point).decode()
-                        else:
-                            pubkey = get_public_key_from_private_bytes(pv_bytes)
+                        pubkey = get_public_key_from_private_bytes(pv_bytes)
                         word, padding = word_filter.check_address(pubkey)
                         suffix_display = (padding + word) if word else pubkey[-TAIL_SIZE:]
                         if mining_mode != "blind":
@@ -363,7 +317,6 @@ def gpu_mining_worker(word_filter, suffix_patterns, output_dir, iteration_bits,
 
 def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
     price_sol = mining_state.get("blind_price_sol", 0)
-    session_blob = mining_state.get("session_blob")
 
     def _log(msg):
         broadcast_event("log", {"msg": f"[Blind] {msg}"})
@@ -374,11 +327,20 @@ def _handle_blind_upload(pv_bytes, pubkey, wallet, vanity_word=""):
     def _on_error(err, addr):
         broadcast_event("error", {"msg": f"Blind upload failed: {str(err)[:80]}"})
 
+    def _on_success(result, addr):
+        mint_address = result.get("mint_address", "")
+        if vanity_word and mint_address:
+            bounties = shared.load_bounties()
+            for b in bounties:
+                if b.get("status") in ("open", "claimed") and b.get("word", "").lower() == vanity_word.lower():
+                    shared.fulfill_bounty(b["id"], addr, mint_address)
+                    broadcast_event("mp_log", {"msg": f"Auto-fulfilled bounty '{b['word']}' -> {addr[:20]}..."})
+                    break
+
     shared.blind_upload(
         pv_bytes, pubkey, wallet, vanity_word=vanity_word,
         price_sol=price_sol, log_fn=_log, mp_fn=_mp,
-        on_error=_on_error,
-        session_blob=session_blob,
+        on_error=_on_error, on_success=_on_success,
     )
 
 
@@ -427,6 +389,16 @@ def api_upload_wordlist():
 @app.route("/")
 def index():
     return render_template("index.html", show_miner=not IS_PRODUCTION)
+
+
+@app.route("/api/escrow-pubkeys")
+def api_escrow_pubkeys():
+    try:
+        from core.marketplace.lit_encrypt import get_escrow_pubkeys
+        escrows = get_escrow_pubkeys()
+        return jsonify({"escrows": escrows})
+    except Exception as e:
+        return jsonify({"error": str(e), "escrows": []}), 500
 
 
 @app.route("/api/status")
@@ -529,22 +501,10 @@ def api_start():
     _stop_event = threading.Event()
 
     count_limit = 0
-    tee_point = None
-    session_blob = None
     if mining_mode == "blind":
         count_limit = len(word_filter.words)
         broadcast_event("log", {"msg": f"[Blind] Will stop after finding {count_limit} addresses (one per word)"})
-        try:
-            from core.marketplace.lit_encrypt import split_key_setup
-            broadcast_event("log", {"msg": "[Blind] Setting up split-key protocol with TEE..."})
-            session_result = split_key_setup()
-            tee_point = session_result["teePoint"]
-            session_blob = session_result
-            broadcast_event("log", {"msg": f"[Blind] Split-key setup complete (session: {session_result['sessionId'][:8]}...)"})
-            broadcast_event("log", {"msg": "[Blind] Mining with split-key: full private key will NEVER exist on this machine"})
-        except Exception as e:
-            broadcast_event("log", {"msg": f"[Blind] Split-key setup failed: {e}"})
-            broadcast_event("log", {"msg": "[Blind] Falling back to direct encryption mode"})
+        broadcast_event("log", {"msg": "[Blind] Keys will be encrypted by TEE and uploaded as NFTs (Phantom-importable)"})
 
     with mining_lock:
         mining_state["running"] = True
@@ -559,8 +519,6 @@ def api_start():
         mining_state["blind_price_sol"] = blind_price_sol
         mining_state["count_limit"] = count_limit
         mining_state["compute_mode"] = compute_mode
-        mining_state["tee_point"] = tee_point
-        mining_state["session_blob"] = session_blob
 
     broadcast_event("status", {"msg": "Starting..."})
 
@@ -724,12 +682,19 @@ def api_bounties_create():
     reward_sol = data.get("reward_sol", 0)
     buyer_address = data.get("buyer_address", "").strip()
     notes = data.get("notes", "").strip()
-
-    bounty, err = shared.create_bounty(word, reward_sol, buyer_address, notes)
+    pattern_type = data.get("pattern_type", "ends_with").strip()
+    case_insensitive = data.get("case_insensitive", True)
+    description = data.get("description", "").strip()
+    bounty, err = shared.create_bounty(
+        word, reward_sol, buyer_address, notes,
+        pattern_type=pattern_type,
+        case_insensitive=case_insensitive,
+        description=description,
+    )
     if err:
         return jsonify({"error": err}), 400
 
-    broadcast_event("mp_log", {"msg": f"Bounty posted: '{bounty['word']}' for {bounty['reward_sol']} SOL by {bounty['buyer_address'][:12]}..."})
+    broadcast_event("mp_log", {"msg": f"Bounty posted: '{bounty['word']}' ({bounty.get('pattern_type','ends_with')}) for {bounty['reward_sol']} SOL"})
     return jsonify({"ok": True, "bounty": bounty})
 
 
@@ -752,6 +717,12 @@ def api_bounties_fulfill(bounty_id):
 
     broadcast_event("mp_log", {"msg": f"Bounty fulfilled: '{bounty['word']}' -> {vanity_address[:20]}..."})
     return jsonify({"ok": True, "bounty": bounty})
+
+
+@app.route("/api/bounty-wordlist", methods=["GET"])
+def api_bounty_wordlist():
+    wordlist = shared.get_bounty_wordlist()
+    return jsonify({"wordlist": wordlist})
 
 
 _PROFILE_PATH = Path("solvanity_profile.json")
